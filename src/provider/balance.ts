@@ -31,11 +31,25 @@ export class BalanceTracker {
   private session: SessionUsage = freshSession();
   private autoRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Dashboard state — managed externally via setDashboardRunning() */
+  private dashboardRunning = false;
+  private dashboardPort = 0;
+  private dashboardLanUrl = '';
+
   constructor(
     private statusBar: vscode.StatusBarItem,
     private getApiKey: () => Promise<string | undefined>,
     private userAgent: string,
   ) {
+    this.updateStatusBar();
+  }
+
+  // ── Dashboard state ──
+
+  setDashboardRunning(running: boolean, port?: number, lanUrl?: string) {
+    this.dashboardRunning = running;
+    this.dashboardPort = port ?? 0;
+    this.dashboardLanUrl = lanUrl ?? '';
     this.updateStatusBar();
   }
 
@@ -138,6 +152,15 @@ export class BalanceTracker {
   private updateStatusBar() {
     const parts: string[] = [];
 
+    // Dashboard indicator takes priority
+    if (this.dashboardRunning) {
+      parts.push(`$(radio-tower) Kimi Code :${this.dashboardPort}`);
+      this.statusBar.text = parts.join(' ');
+      this.statusBar.tooltip = this.buildTooltip();
+      this.statusBar.show();
+      return;
+    }
+
     // Session usage
     const totalTokens = this.session.promptTokens + this.session.completionTokens;
     if (totalTokens > 0) {
@@ -161,6 +184,17 @@ export class BalanceTracker {
 
   private buildTooltip(): string {
     const lines: string[] = ['**Kimi Code for Copilot**', ''];
+
+    // Dashboard info
+    if (this.dashboardRunning) {
+      lines.push('── 📡 用量看板运行中 ──');
+      lines.push(`端口: ${this.dashboardPort}`);
+      lines.push(`本地: http://localhost:${this.dashboardPort}`);
+      if (this.dashboardLanUrl) {
+        lines.push(`局域网: ${this.dashboardLanUrl}`);
+      }
+      lines.push('');
+    }
 
     // Session stats
     if (this.session.requestCount > 0) {

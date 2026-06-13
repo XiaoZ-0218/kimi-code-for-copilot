@@ -85,7 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
               await vscode.env.openExternal(vscode.Uri.parse(urls[0]));
             } else if (picked === '停止看板') {
               await dashboardServer!.stop();
-              statusBar.text = '$(kebab-horizontal) Kimi Code';
+              provider.balanceTracker.setDashboardRunning(false);
             }
             return;
           }
@@ -95,8 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
             const localUrl = urls[0];
             const lanUrl = urls.length > 1 ? urls[1] : localUrl;
 
-            statusBar.text = `$(radio-tower) Kimi Code :${port}`;
-            statusBar.tooltip = `用量看板运行中\n本地: ${localUrl}\n局域网: ${lanUrl}\n点击管理`;
+            provider.balanceTracker.setDashboardRunning(true, port, lanUrl);
 
             const picked = await vscode.window.showInformationMessage(
               `用量看板已启动！用手机扫码或浏览器打开`,
@@ -130,7 +129,7 @@ export function activate(context: vscode.ExtensionContext) {
             return;
           }
           await dashboardServer.stop();
-          statusBar.text = '$(kebab-horizontal) Kimi Code';
+          provider.balanceTracker.setDashboardRunning(false);
           void vscode.window.showInformationMessage('用量看板已停止');
         },
       ),
