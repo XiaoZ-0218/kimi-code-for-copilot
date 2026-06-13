@@ -82,21 +82,23 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
     this.balanceTracker.dispose();
   }
 
-  // ── LM Provider ──
+  // ── LM Provider (VS Code 1.116+ API) ──
 
-  async provideLanguageModels(
+  provideLanguageModelChatInformation(
+    _options: vscode.PrepareLanguageModelChatModelOptions,
     _token: vscode.CancellationToken,
-  ): Promise<vscode.LanguageModelChatInformation[]> {
-    const hasKey = await this.authManager.hasApiKey();
-    return MODELS.map((model) => toChatInfo(model as ModelVariant, hasKey));
+  ): vscode.ProviderResult<vscode.LanguageModelChatInformation[]> {
+    // Return synchronously since we check the key in the background
+    return MODELS.map((model) => toChatInfo(model as ModelVariant, true));
   }
 
   async provideLanguageModelChatResponse(
     modelInfo: vscode.LanguageModelChatInformation,
-    messages: vscode.LanguageModelChatMessage[],
-    options: vscode.LanguageModelChatRequestOptions,
+    messages: readonly vscode.LanguageModelChatRequestMessage[],
+    options: vscode.ProvideLanguageModelChatResponseOptions,
+    progress: vscode.Progress<vscode.LanguageModelResponsePart>,
     token: vscode.CancellationToken,
-  ): Promise<vscode.LanguageModelChatResponse> {
+  ): Promise<void> {
     if (!this.isActive) {
       throw new Error('Kimi Code provider is deactivating');
     }
@@ -113,42 +115,65 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
       `[req] model=${prepared.model} thinking=${prepared.thinking} messages=${messages.length} chars=${prepared.inputCharCount}`,
     );
 
-    const stream = new vscode.LanguageModelChatResponseStream();
     const self = this;
 
-    streamChatCompletion(
+    await streamChatCompletion(
       prepared.url,
       prepared.headers,
       prepared.body,
       {
         onData(chunk: string) {
-          stream.addContent(chunk);
+          progress.report(new vscode.LanguageModelTextPart(chunk));
         },
         onToolCall(toolCall) {
-          stream.addToolCall({
-            name: toolCall.name,
-            input: toolCall.arguments,
-            toolCallId: toolCall.id,
-          });
+          progress.report(
+            new vscode.LanguageModelToolCallPart(
+              toolCall.id,
+              toolCall.name,
+              JSON.parse(toolCall.arguments || '{}'),
+            ),
+          );
         },
         onComplete(usage) {
           if (usage) {
-            stream.addDataPart({ mimeType: USAGE_MIME_TYPE, data: usage });
+            const jsonBytes = new TextEncoder().encode(JSON.stringify(usage));
+            progress.report(
+              new vscode.LanguageModelDataPart(jsonBytes, USAGE_MIME_TYPE),
+            );
             self.balanceTracker.recordUsage(prepared.model, usage);
           }
-          stream.close();
         },
         onError(error) {
           logger.error(`Stream error: ${error.message}`);
-          stream.error(error);
+          throw error;
         },
       },
       token,
-    ).catch((err) => {
-      if (err instanceof vscode.CancellationError) return;
-      logger.error(`Unhandled stream error: ${err}`);
-    });
+    );
+  }
 
-    return stream;
+  async provideTokenCount(
+    model: vscode.LanguageModelChatInformation,
+    text: string | vscode.LanguageModelChatRequestMessage,
+    _token: vscode.CancellationToken,
+  ): Promise<number> {
+    // Simple approximate token counting (4 chars ≈ 1 token for English, 1.5 for Chinese)
+    const str = typeof text === 'string' ? text : this.messageToString(text);
+    const chineseChars = (str.match(/[\u4e00-\u9fff]/g) || []).length;
+    const otherChars = str.length - chineseChars;
+    return Math.ceil(chineseChars / 1.5 + otherChars / 4);
+  }
+
+  private messageToString(msg: vscode.LanguageModelChatRequestMessage): string {
+    return msg.content
+      .map((part) => {
+        if (part instanceof vscode.LanguageModelTextPart) return part.value;
+        if (part instanceof vscode.LanguageModelToolCallPart)
+          return JSON.stringify({ name: part.name, input: part.input });
+        if (part instanceof vscode.LanguageModelToolResultPart)
+          return part.content.map((c) => (c instanceof vscode.LanguageModelTextPart ? c.value : '')).join('');
+        return '';
+      })
+      .join('');
   }
 }

@@ -11,12 +11,6 @@ export function toChatInfo(
     ? `${model.description}\n\nContext: ${formatTokens(model.maxInputTokens)} in / ${formatTokens(model.maxOutputTokens)} out`
     : API_KEY_REQUIRED_DETAIL;
 
-  const statusIcon = !hasKey
-    ? new vscode.ThemeIcon('warning')
-    : model.thinking
-      ? new vscode.ThemeIcon('lightbulb-sparkle')
-      : new vscode.ThemeIcon('rocket');
-
   const info: vscode.LanguageModelChatInformation = {
     id: model.id,
     name: model.name,
@@ -26,36 +20,13 @@ export function toChatInfo(
     tooltip,
     maxInputTokens: model.maxInputTokens,
     maxOutputTokens: model.maxOutputTokens,
-    isUserSelectable: true,
-    statusIcon,
-    category: { label: 'Kimi Code', order: 50 },
     capabilities: {
       imageInput: false,
       toolCalling: MAX_TOOLS_PER_REQUEST,
     },
-    ...(model.thinking ? { configurationSchema: buildThinkingEffortSchema() } : {}),
   };
 
   return info;
-}
-
-function buildThinkingEffortSchema() {
-  return {
-    properties: {
-      reasoningEffort: {
-        type: 'string',
-        title: 'Thinking Effort',
-        enum: ['medium', 'high'],
-        enumItemLabels: ['Medium', 'High'],
-        enumDescriptions: [
-          'Balanced thinking depth for most tasks.',
-          'Maximum reasoning depth for complex problems.',
-        ],
-        default: 'high',
-        group: 'navigation',
-      },
-    },
-  };
 }
 
 function formatTokens(n: number): string {

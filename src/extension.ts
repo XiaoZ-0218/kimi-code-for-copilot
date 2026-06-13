@@ -161,7 +161,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Register the LM provider
     context.subscriptions.push(
-      vscode.lm.registerLanguageModelChatProvider('kimi-code', provider),
+      vscode.lm.registerLanguageModelChatProvider('kimi-code', provider as vscode.LanguageModelChatProvider<vscode.LanguageModelChatInformation>),
     );
 
     logger.info('Kimi Code for Copilot 就绪');

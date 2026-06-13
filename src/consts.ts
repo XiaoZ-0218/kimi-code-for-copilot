@@ -17,8 +17,8 @@ export const MODELS = [
     vendor: 'kimi-code',
     family: 'kimi-for-coding',
     version: 'thinking',
-    maxInputTokens: 196608, // 192K
-    maxOutputTokens: 65536,  // 64K
+    maxInputTokens: 196608,
+    maxOutputTokens: 65536,
     thinking: true,
   },
   {
@@ -36,7 +36,3 @@ export const MODELS = [
 ] as const;
 
 export type ModelVariant = (typeof MODELS)[number];
-
-/** Copilot utility model settings. */
-export const COPILOT_UTILITY_MODEL_SETTING = 'chat.utilityModel';
-export const COPILOT_UTILITY_SMALL_MODEL_SETTING = 'chat.utilitySmallModel';
