@@ -1,0 +1,133 @@
+{
+  "name": "kimi-code-for-copilot",
+  "displayName": "Kimi Code for Copilot — Usage Tracking",
+  "description": "Kimi Code (K2.7) in GitHub Copilot Chat. Track CodingPlan usage and quota in real-time status bar. BYOK integration with one-click setup.",
+  "icon": "resources/icon.png",
+  "version": "0.1.0",
+  "publisher": "xiaoz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiaoz/kimi-code-for-copilot.git"
+  },
+  "engines": {
+    "vscode": "^1.116.0",
+    "node": ">=24"
+  },
+  "extensionDependencies": [
+    "github.copilot-chat"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "kimi",
+    "kimi code",
+    "kimi-for-coding",
+    "k2.7",
+    "moonshot",
+    "copilot",
+    "github copilot",
+    "copilot chat",
+    "byok",
+    "language model",
+    "thinking",
+    "reasoning",
+    "ai",
+    "chat",
+    "coding plan",
+    "usage"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languageModelChatProviders": [
+      {
+        "vendor": "kimi-code",
+        "displayName": "Kimi Code",
+        "managementCommand": "kimi-code-copilot.manage"
+      }
+    ],
+    "commands": [
+      {
+        "command": "kimi-code-copilot.manage",
+        "title": "Kimi Code: Manage Provider"
+      },
+      {
+        "command": "kimi-code-copilot.setApiKey",
+        "title": "Kimi Code: Set API Key"
+      },
+      {
+        "command": "kimi-code-copilot.getApiKey",
+        "title": "Kimi Code: Get API Key (Open Console)"
+      },
+      {
+        "command": "kimi-code-copilot.clearApiKey",
+        "title": "Kimi Code: Clear API Key"
+      },
+      {
+        "command": "kimi-code-copilot.refreshUsage",
+        "title": "Kimi Code: Refresh Usage Info"
+      },
+      {
+        "command": "kimi-code-copilot.showLogs",
+        "title": "Kimi Code: Show Logs"
+      },
+      {
+        "command": "kimi-code-copilot.openConsole",
+        "title": "Kimi Code: Open Console"
+      },
+      {
+        "command": "kimi-code-copilot.clearSession",
+        "title": "Kimi Code: Clear Session Counter"
+      }
+    ],
+    "configuration": {
+      "title": "Kimi Code for Copilot",
+      "properties": {
+        "kimi-code-copilot.baseUrl": {
+          "type": "string",
+          "default": "https://api.kimi.com/coding/v1",
+          "description": "Base URL for the Kimi Code API (OpenAI-compatible endpoint)."
+        },
+        "kimi-code-copilot.maxTokens": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Maximum output tokens per request. Set to 0 for model default."
+        },
+        "kimi-code-copilot.modelId": {
+          "type": "string",
+          "default": "kimi-for-coding",
+          "description": "Model ID to use. Default is 'kimi-for-coding' (auto-updated to latest K2.x Code model)."
+        },
+        "kimi-code-copilot.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging to the output channel."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('out', { recursive: true, force: true, maxRetries: 10 })\"",
+    "vscode:prepublish": "npm run compile",
+    "compile": "npm run clean && tsc -p ./",
+    "watch": "npm run clean && tsc -watch -p ./",
+    "lint": "npx oxlint",
+    "package": "mkdir -p dist && npx @vscode/vsce package -o dist/kimi-code-for-copilot.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/vscode": "^1.116.0",
+    "@vscode/vsce": "^3.9.1",
+    "typescript": "^6.0.3"
+  }
+}
