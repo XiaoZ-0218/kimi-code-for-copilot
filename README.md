@@ -6,6 +6,7 @@
 
 - 🔌 **BYOK 接入** — 使用自己的 Kimi Code API Key，在 Copilot Chat 模型选择器中直接使用
 - 📊 **用量追踪** — 状态栏实时显示会话 Token 消耗和 Kimi Code 剩余额度
+- 🌐 **用量看板** — 一键启动本地 Web 看板，手机浏览器可访问，精美 UI 实时展示用量
 - 🧠 **思考模式** — 支持 K2.7 Code 的 extended thinking 能力
 - 🔧 **一键管理** — 命令面板快速设置 API Key、查看用量、打开控制台
 
@@ -28,6 +29,10 @@
 ### 4. 查看用量
 
 状态栏右侧会显示当前会话的 Token 消耗和 Kimi Code 剩余额度。点击状态栏或执行 **Kimi Code: Manage Provider** 可进行更多操作。
+
+### 5. 用量看板（手机可访问）
+
+执行 **Kimi Code: Start Usage Dashboard** 启动本地 Web 服务器，终端会显示局域网地址。用手机浏览器打开即可看到精美的实时用量看板。
 
 ## 配置
 
