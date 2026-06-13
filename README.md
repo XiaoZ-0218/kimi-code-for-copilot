@@ -1,7 +1,4 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/icon.svg">
-  <img alt="Kimi Code for Copilot" src="resources/icon.svg" width="128">
-</picture>
+<img alt="Kimi Code for Copilot" src="resources/icon.png" width="128">
 
 # Kimi Code for Copilot
 
