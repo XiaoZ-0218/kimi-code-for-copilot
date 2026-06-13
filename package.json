@@ -87,6 +87,16 @@
       {
         "command": "kimi-code-copilot.clearSession",
         "title": "Kimi Code: Clear Session Counter"
+      },
+      {
+        "command": "kimi-code-copilot.startDashboard",
+        "title": "Kimi Code: Start Usage Dashboard",
+        "icon": "$(radio-tower)"
+      },
+      {
+        "command": "kimi-code-copilot.stopDashboard",
+        "title": "Kimi Code: Stop Usage Dashboard",
+        "icon": "$(circle-slash)"
       }
     ],
     "configuration": {

@@ -197,6 +197,17 @@ export class BalanceTracker {
     return lines.join('\n');
   }
 
+  // ── Getters for dashboard ──
+
+  getSession(): SessionUsage {
+    return { ...this.session };
+  }
+
+  getBalance(): KimiBalance | null {
+    return this.balance ? { ...this.balance } : null;
+  }
+
+  // ── Private helpers ──
   dispose() {
     if (this.autoRefreshTimer) {
       clearTimeout(this.autoRefreshTimer);
