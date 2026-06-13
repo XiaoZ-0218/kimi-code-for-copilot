@@ -197,24 +197,24 @@ export class BalanceTracker {
     this.statusBar.show();
   }
 
-  private buildTooltip(): string {
-    const lines: string[] = ['**Kimi Code for Copilot**', ''];
+  private buildTooltip(): vscode.MarkdownString {
+    const lines: string[] = [];
 
     // Dashboard
     if (this.dashboardRunning) {
-      lines.push('── 📡 看板运行中 ──');
+      lines.push('**📡 看板运行中**');
       lines.push(`端口: ${this.dashboardPort}`);
       if (this.dashboardLanUrl) lines.push(`局域网: ${this.dashboardLanUrl}`);
-      lines.push('');
+      lines.push('---');
     }
 
     // API key status
-    lines.push(this.usage ? '$(check) API Key 已配置' : '$(warning) 未设置 API Key');
+    lines.push(this.usage ? '✅ API Key 已配置' : '⚠️ 未设置 API Key');
     lines.push('');
 
     // Plan usage
     if (this.usage) {
-      lines.push(`── ${this.usage.copilotPlan} 套餐 ──`);
+      lines.push(`**${this.usage.copilotPlan} 套餐**`);
       for (const tier of this.usage.tiers) {
         const bar = renderBar(tier.utilization);
         const detail = tier.limit ? ` (${tier.used}/${tier.limit})` : '';
@@ -231,20 +231,25 @@ export class BalanceTracker {
 
     // Session
     if (this.session.requestCount > 0) {
-      lines.push('── 本次会话 ──');
+      lines.push('**本次会话**');
       lines.push(`请求: ${this.session.requestCount}`);
       lines.push(`输入: ${formatNumber(this.session.promptTokens)} tok · 输出: ${formatNumber(this.session.completionTokens)} tok`);
       lines.push(`耗时: ${formatDuration(Date.now() - this.session.startTime)}`);
       lines.push('');
     } else {
-      lines.push('── 本次会话 ──');
+      lines.push('**本次会话**');
       lines.push('暂无活动');
       lines.push('');
     }
 
+    lines.push('---');
     lines.push('点击打开管理菜单');
     lines.push('控制台: https://www.kimi.com/code/console');
-    return lines.join('\n');
+
+    const md = new vscode.MarkdownString(lines.join('\n'));
+    md.supportHtml = true;
+    md.isTrusted = true;
+    return md;
   }
 
   // ── Getters ──
