@@ -10,6 +10,14 @@
     "type": "git",
     "url": "https://github.com/xiaoz/kimi-code-for-copilot.git"
   },
+  "bugs": {
+    "url": "https://github.com/xiaoz/kimi-code-for-copilot/issues"
+  },
+  "homepage": "https://github.com/xiaoz/kimi-code-for-copilot#readme",
+  "galleryBanner": {
+    "color": "#0f0f14",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.116.0",
     "node": ">=24"
