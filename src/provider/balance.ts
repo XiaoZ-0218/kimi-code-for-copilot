@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from '../logger';
 import { getApiUrl } from '../config';
-import type { KimiBalance, SessionUsage } from '../types';
+import type { KimiUsage, KimiUsageTier, SessionUsage } from '../types';
 
 function freshSession(): SessionUsage {
   return {
@@ -16,7 +16,7 @@ function freshSession(): SessionUsage {
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
+  return String(Math.round(n));
 }
 
 function formatDuration(ms: number): string {
@@ -27,11 +27,17 @@ function formatDuration(ms: number): string {
 }
 
 export class BalanceTracker {
-  private balance: KimiBalance | null = null;
+  private usage: KimiUsage | null = null;
   private session: SessionUsage = freshSession();
-  private autoRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  private usageFetchTimer: ReturnType<typeof setTimeout> | undefined;
+  private displayTimer: ReturnType<typeof setInterval> | undefined;
 
-  /** Dashboard state — managed externally via setDashboardRunning() */
+  /** API refresh interval in ms (default 30s) */
+  private apiRefreshMs = 30_000;
+  /** Display refresh interval in ms (default 1s) */
+  private displayRefreshMs = 1_000;
+
+  /** Dashboard state */
   private dashboardRunning = false;
   private dashboardPort = 0;
   private dashboardLanUrl = '';
@@ -42,6 +48,28 @@ export class BalanceTracker {
     private userAgent: string,
   ) {
     this.updateStatusBar();
+    this.startDisplayTimer();
+    // Fetch usage right away
+    void this.refreshBalance(true);
+  }
+
+  // ── Refresh intervals ──
+
+  setApiRefreshInterval(ms: number) {
+    this.apiRefreshMs = Math.max(5_000, ms);
+  }
+
+  setDisplayRefreshInterval(ms: number) {
+    this.displayRefreshMs = Math.max(500, ms);
+    if (this.displayTimer) {
+      clearInterval(this.displayTimer);
+      this.displayTimer = setInterval(() => this.updateStatusBar(), this.displayRefreshMs);
+    }
+  }
+
+  private startDisplayTimer() {
+    if (this.displayTimer) clearInterval(this.displayTimer);
+    this.displayTimer = setInterval(() => this.updateStatusBar(), this.displayRefreshMs);
   }
 
   // ── Dashboard state ──
@@ -53,40 +81,45 @@ export class BalanceTracker {
     this.updateStatusBar();
   }
 
-  recordUsage(model: string, usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }) {
-    this.session.promptTokens += usage.prompt_tokens ?? 0;
-    this.session.completionTokens += usage.completion_tokens ?? 0;
+  // ── Usage recording ──
+
+  recordUsage(model: string, usageData: { prompt_tokens: number; completion_tokens: number; total_tokens: number }) {
+    this.session.promptTokens += usageData.prompt_tokens ?? 0;
+    this.session.completionTokens += usageData.completion_tokens ?? 0;
     this.session.requestCount += 1;
     logger.info(
-      `usage model=${model} prompt=${usage.prompt_tokens} completion=${usage.completion_tokens} total=${usage.total_tokens} reqCount=${this.session.requestCount}`,
+      `usage model=${model} prompt=${usageData.prompt_tokens} completion=${usageData.completion_tokens} total=${usageData.total_tokens} reqCount=${this.session.requestCount}`,
     );
+    // Immediate display update; API refresh is debounced
     this.updateStatusBar();
-    this.scheduleSilentBalanceRefresh();
+    this.scheduleApiRefresh();
   }
+
+  // ── Kimi Code usage API ──
 
   async refreshBalance(silent = false) {
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       if (!silent) {
-        vscode.window.showWarningMessage('Set your Kimi Code API key first (Command Palette → Kimi Code: Set API Key).');
+        vscode.window.showWarningMessage('请先设置 Kimi Code API Key（命令面板 → Kimi Code: Set API Key）');
       }
       return;
     }
 
     try {
-      // Try the Kimi platform balance endpoint
-      const url = getApiUrl('/v1/users/me/balance');
+      const url = getApiUrl('/v1/usages');
       const res = await fetch(url, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'User-Agent': this.userAgent,
+          Accept: 'application/json',
         },
       });
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        logger.warn(`Balance fetch failed: ${res.status} ${text.slice(0, 200)}`);
+        logger.warn(`用量查询失败: ${res.status} ${text.slice(0, 200)}`);
         if (!silent) {
           vscode.window.showWarningMessage(
             `Kimi Code 用量查询失败: HTTP ${res.status}。请在控制台查看: https://www.kimi.com/code/console`,
@@ -95,38 +128,19 @@ export class BalanceTracker {
         return;
       }
 
-      const data = (await res.json()) as {
-        available?: boolean;
-        total_balance?: number;
-        total_used?: number;
-        total_granted?: number;
-        currency?: string;
-      };
-
-      this.balance = {
-        available: data.available ?? true,
-        totalBalance: data.total_balance,
-        totalUsed: data.total_used,
-        totalGranted: data.total_granted,
-        currency: data.currency,
-        fetchedAt: Date.now(),
-      };
-
+      this.usage = parseKimiUsage(await res.json());
       this.updateStatusBar();
 
-      if (!silent) {
-        const sym = this.balance.currency === 'CNY' ? '¥' : '$';
+      if (!silent && this.usage) {
         void vscode.window.setStatusBarMessage(
-          `$(check) Kimi Code 余额: ${sym}${this.balance.totalBalance?.toFixed(2) ?? 'N/A'}`,
+          `$(check) Kimi Code [${this.usage.copilotPlan}] 剩余 ${this.usage.premium.remaining}/${this.usage.premium.entitlement}`,
           4000,
         );
       }
     } catch (e) {
-      logger.warn('Balance fetch error', e);
+      logger.warn('用量查询异常', e);
       if (!silent) {
-        vscode.window.showErrorMessage(
-          `Kimi Code 用量查询失败: ${e instanceof Error ? e.message : String(e)}`,
-        );
+        vscode.window.showErrorMessage(`Kimi Code 用量查询失败: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   }
@@ -135,12 +149,12 @@ export class BalanceTracker {
     this.updateStatusBar();
   }
 
-  private scheduleSilentBalanceRefresh() {
-    if (this.autoRefreshTimer) clearTimeout(this.autoRefreshTimer);
-    this.autoRefreshTimer = setTimeout(() => {
-      this.autoRefreshTimer = undefined;
+  private scheduleApiRefresh() {
+    if (this.usageFetchTimer) clearTimeout(this.usageFetchTimer);
+    this.usageFetchTimer = setTimeout(() => {
+      this.usageFetchTimer = undefined;
       void this.refreshBalance(true);
-    }, 1500);
+    }, this.apiRefreshMs);
   }
 
   clearSession() {
@@ -149,32 +163,33 @@ export class BalanceTracker {
     vscode.window.showInformationMessage('Kimi Code 会话计数器已清零。');
   }
 
+  // ── Status bar ──
+
   private updateStatusBar() {
     const parts: string[] = [];
 
-    // Dashboard indicator takes priority
+    // Dashboard takes priority
     if (this.dashboardRunning) {
-      parts.push(`$(radio-tower) Kimi Code :${this.dashboardPort}`);
+      parts.push(`$(radio-tower) Kimi :${this.dashboardPort}`);
       this.statusBar.text = parts.join(' ');
       this.statusBar.tooltip = this.buildTooltip();
       this.statusBar.show();
       return;
     }
 
-    // Session usage
-    const totalTokens = this.session.promptTokens + this.session.completionTokens;
-    if (totalTokens > 0) {
-      parts.push(`$(pulse) ${formatNumber(totalTokens)} tok`);
+    // Always show plan + remaining (compact)
+    if (this.usage) {
+      const rem = this.usage.premium.remaining;
+      const ent = this.usage.premium.entitlement;
+      parts.push(`$(credit-card) ${rem}/${ent}`);
+    } else {
+      parts.push('$(key) Kimi');
     }
 
-    // Balance info from API
-    if (this.balance?.totalBalance !== undefined) {
-      const sym = this.balance.currency === 'CNY' ? '¥' : '$';
-      parts.push(`$(credit-card) ${sym}${this.balance.totalBalance.toFixed(2)}`);
-    }
-
-    if (parts.length === 0) {
-      parts.push(`$(kebab-horizontal) Kimi Code`);
+    // Session token count
+    const totalTok = this.session.promptTokens + this.session.completionTokens;
+    if (totalTok > 0) {
+      parts.push(`$(pulse) ${formatNumber(totalTok)}`);
     }
 
     this.statusBar.text = parts.join(' ');
@@ -185,68 +200,145 @@ export class BalanceTracker {
   private buildTooltip(): string {
     const lines: string[] = ['**Kimi Code for Copilot**', ''];
 
-    // Dashboard info
+    // Dashboard
     if (this.dashboardRunning) {
-      lines.push('── 📡 用量看板运行中 ──');
+      lines.push('── 📡 看板运行中 ──');
       lines.push(`端口: ${this.dashboardPort}`);
-      lines.push(`本地: http://localhost:${this.dashboardPort}`);
-      if (this.dashboardLanUrl) {
-        lines.push(`局域网: ${this.dashboardLanUrl}`);
-      }
+      if (this.dashboardLanUrl) lines.push(`局域网: ${this.dashboardLanUrl}`);
       lines.push('');
     }
 
-    // Session stats
+    // API key status
+    lines.push(this.usage ? '$(check) API Key 已配置' : '$(warning) 未设置 API Key');
+    lines.push('');
+
+    // Plan usage
+    if (this.usage) {
+      lines.push(`── ${this.usage.copilotPlan} 套餐 ──`);
+      for (const tier of this.usage.tiers) {
+        const bar = renderBar(tier.utilization);
+        const detail = tier.limit ? ` (${tier.used}/${tier.limit})` : '';
+        lines.push(`${tier.label}: ${bar} ${Math.round(tier.utilization)}%${detail}`);
+      }
+      if (this.usage.premium.entitlement > 0 && this.usage.tiers.length === 0) {
+        lines.push(`Premium: ${this.usage.premium.remaining}/${this.usage.premium.entitlement}`);
+      }
+      lines.push(`重置日期: ${this.usage.quotaResetDate}`);
+      const fetchTime = new Date(this.usage.fetchedAt).toLocaleTimeString();
+      lines.push(`数据更新: ${fetchTime}`);
+      lines.push('');
+    }
+
+    // Session
     if (this.session.requestCount > 0) {
       lines.push('── 本次会话 ──');
-      lines.push(`请求数: ${this.session.requestCount}`);
-      lines.push(`Prompt Tokens: ${formatNumber(this.session.promptTokens)}`);
-      lines.push(`Completion Tokens: ${formatNumber(this.session.completionTokens)}`);
-      lines.push(
-        `总计 Tokens: ${formatNumber(this.session.promptTokens + this.session.completionTokens)}`,
-      );
-      lines.push(`已用时间: ${formatDuration(Date.now() - this.session.startTime)}`);
+      lines.push(`请求: ${this.session.requestCount}`);
+      lines.push(`输入: ${formatNumber(this.session.promptTokens)} tok · 输出: ${formatNumber(this.session.completionTokens)} tok`);
+      lines.push(`耗时: ${formatDuration(Date.now() - this.session.startTime)}`);
+      lines.push('');
+    } else {
+      lines.push('── 本次会话 ──');
+      lines.push('暂无活动');
       lines.push('');
     }
 
-    // Platform balance
-    if (this.balance?.totalBalance !== undefined) {
-      const sym = this.balance.currency === 'CNY' ? '¥' : '$';
-      lines.push('── Kimi Code 用量 ──');
-      lines.push(`剩余: ${sym}${this.balance.totalBalance.toFixed(2)}`);
-      if (this.balance.totalUsed !== undefined) {
-        lines.push(`已用: ${sym}${this.balance.totalUsed.toFixed(2)}`);
-      }
-      if (this.balance.fetchedAt) {
-        const time = new Date(this.balance.fetchedAt).toLocaleTimeString();
-        lines.push(`更新: ${time}`);
-      }
-      lines.push('');
-    }
-
-    lines.push('── 快捷操作 ──');
     lines.push('点击打开管理菜单');
-    lines.push('查看控制台: https://www.kimi.com/code/console');
-
+    lines.push('控制台: https://www.kimi.com/code/console');
     return lines.join('\n');
   }
 
-  // ── Getters for dashboard ──
+  // ── Getters ──
 
   getSession(): SessionUsage {
     return { ...this.session };
   }
 
-  getBalance(): KimiBalance | null {
-    return this.balance ? { ...this.balance } : null;
+  getUsage(): KimiUsage | null {
+    return this.usage ? { ...this.usage, tiers: [...this.usage.tiers] } : null;
   }
 
-  // ── Private helpers ──
   dispose() {
-    if (this.autoRefreshTimer) {
-      clearTimeout(this.autoRefreshTimer);
-      this.autoRefreshTimer = undefined;
-    }
+    if (this.displayTimer) clearInterval(this.displayTimer);
+    if (this.usageFetchTimer) clearTimeout(this.usageFetchTimer);
     this.statusBar.dispose();
   }
 }
+
+// ── Kimi API response parser ──
+
+interface KimiUsageRaw {
+  copilot_plan?: string;
+  quota_reset_date?: string;
+  quota_snapshots?: {
+    premium_interactions?: { entitlement?: number; remaining?: number };
+  };
+  usage?: Array<{
+    limit?: number;
+    remaining?: number;
+    resetTime?: string;
+    period_limit?: number;
+    period_remaining?: number;
+  }>;
+}
+
+function parseKimiUsage(raw: KimiUsageRaw): KimiUsage {
+  const premium = raw.quota_snapshots?.premium_interactions ?? {};
+  const tiers: KimiUsageTier[] = [];
+
+  for (const item of raw.usage ?? []) {
+    if (item.limit !== undefined && item.limit > 0) {
+      const remaining = item.remaining ?? 0;
+      const used = item.limit - remaining;
+      tiers.push({
+        name: 'weekly',
+        utilization: (used / item.limit) * 100,
+        label: '周额度',
+        used,
+        limit: item.limit,
+        resetsAt: item.resetTime,
+      });
+    }
+    if (item.period_limit !== undefined && item.period_limit > 0) {
+      const remaining = item.period_remaining ?? 0;
+      const used = item.period_limit - remaining;
+      tiers.push({
+        name: '5hour',
+        utilization: (used / item.period_limit) * 100,
+        label: '5小时窗口',
+        used,
+        limit: item.period_limit,
+      });
+    }
+  }
+
+  if (tiers.length === 0 && premium.entitlement && premium.entitlement > 0) {
+    const remaining = premium.remaining ?? 0;
+    const used = premium.entitlement - remaining;
+    tiers.push({
+      name: 'premium',
+      utilization: (used / premium.entitlement) * 100,
+      label: 'Premium 请求',
+      used,
+      limit: premium.entitlement,
+      resetsAt: raw.quota_reset_date,
+    });
+  }
+
+  return {
+    copilotPlan: raw.copilot_plan ?? 'Unknown',
+    quotaResetDate: raw.quota_reset_date ?? 'N/A',
+    premium: {
+      entitlement: premium.entitlement ?? 0,
+      remaining: premium.remaining ?? 0,
+    },
+    tiers,
+    fetchedAt: Date.now(),
+  };
+}
+
+function renderBar(pct: number): string {
+  const filled = Math.round(pct / 10);
+  const empty = 10 - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+

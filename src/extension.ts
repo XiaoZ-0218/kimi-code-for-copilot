@@ -4,7 +4,7 @@ import { AuthManager } from './auth';
 import { KimiCodeChatProvider } from './provider/index';
 import { DashboardServer } from './dashboard/server';
 import type { DashboardData } from './dashboard/server';
-import { getDebugLoggingEnabled } from './config';
+import { getDebugLoggingEnabled, getUsageRefreshInterval, getDisplayRefreshInterval } from './config';
 
 let activeProvider: KimiCodeChatProvider | undefined;
 let dashboardServer: DashboardServer | undefined;
@@ -56,10 +56,26 @@ export function activate(context: vscode.ExtensionContext) {
     );
     activeProvider = provider;
 
+    // Apply config refresh intervals
+    provider.balanceTracker.setApiRefreshInterval(getUsageRefreshInterval() * 1000);
+    provider.balanceTracker.setDisplayRefreshInterval(getDisplayRefreshInterval() * 1000);
+
+    // Listen for config changes
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('kimi-code-copilot.usageRefreshInterval')) {
+          provider.balanceTracker.setApiRefreshInterval(getUsageRefreshInterval() * 1000);
+        }
+        if (e.affectsConfiguration('kimi-code-copilot.displayRefreshInterval')) {
+          provider.balanceTracker.setDisplayRefreshInterval(getDisplayRefreshInterval() * 1000);
+        }
+      }),
+    );
+
     // Dashboard server - data provider function
     const getDashboardData = (): DashboardData => ({
       session: provider.balanceTracker.getSession(),
-      balance: provider.balanceTracker.getBalance(),
+      usage: provider.balanceTracker.getUsage(),
       serverUrl: dashboardServer?.isRunning()
         ? `http://localhost:${dashboardServer.getPort()}`
         : '未启动',

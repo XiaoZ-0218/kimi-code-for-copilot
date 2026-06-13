@@ -1,11 +1,11 @@
 import * as http from 'node:http';
 import * as os from 'node:os';
 import { logger } from '../logger';
-import type { KimiBalance, SessionUsage } from '../types';
+import type { KimiUsage, SessionUsage } from '../types';
 
 export interface DashboardData {
   session: SessionUsage;
-  balance: KimiBalance | null;
+  usage: KimiUsage | null;
   serverUrl: string;
   startTime: number;
 }
@@ -39,10 +39,9 @@ function formatDuration(ms: number): string {
 }
 
 function renderPage(data: DashboardData): string {
-  const { session, balance } = data;
+  const { session, usage } = data;
   const totalTokens = session.promptTokens + session.completionTokens;
   const elapsed = Date.now() - session.startTime;
-  const sym = balance?.currency === 'CNY' ? '¥' : '$';
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -213,31 +212,33 @@ function renderPage(data: DashboardData): string {
     </div>
   </div>
 
-  <!-- Balance Card -->
-  ${balance?.totalBalance !== undefined ? `
+  <!-- Usage Card -->
+  ${usage ? `
   <div class="card">
-    <div class="card-title">💰 平台余额</div>
+    <div class="card-title">📦 ${usage.copilotPlan} 套餐</div>
+    ${usage.tiers.map(tier => `
     <div class="stat-row">
-      <span class="stat-label">剩余额度</span>
-      <span class="stat-value big ${balance.totalBalance > 10 ? 'balance-positive' : balance.totalBalance > 1 ? 'balance-warning' : 'balance-low'}">${sym}${balance.totalBalance.toFixed(2)}</span>
+      <span class="stat-label">${tier.label}</span>
+      <span class="stat-value">${tier.limit ? `${tier.used}/${tier.limit}` : `${Math.round(tier.utilization)}%`}</span>
     </div>
-    ${balance.totalUsed !== undefined ? `
-    <div class="stat-row">
-      <span class="stat-label">已用额度</span>
-      <span class="stat-value">${sym}${balance.totalUsed.toFixed(2)}</span>
-    </div>` : ''}
-    ${balance.totalGranted !== undefined ? `
     <div class="progress-bar">
-      <div class="progress-fill" style="width:${Math.min(100, ((balance.totalUsed ?? 0) / (balance.totalGranted + (balance.totalUsed ?? 0))) * 100)}%"></div>
-    </div>` : ''}
+      <div class="progress-fill" style="width:${Math.min(100, tier.utilization)}%"></div>
+    </div>
+    `).join('')}
+    ${usage.tiers.length === 0 && usage.premium.entitlement > 0 ? `
     <div class="stat-row">
-      <span class="stat-label">状态</span>
-      <span class="tag tag-active">✓ 可用</span>
+      <span class="stat-label">Premium 剩余</span>
+      <span class="stat-value big">${usage.premium.remaining}/${usage.premium.entitlement}</span>
+    </div>
+    ` : ''}
+    <div class="stat-row">
+      <span class="stat-label">重置日期</span>
+      <span class="stat-value tag tag-info">${usage.quotaResetDate}</span>
     </div>
   </div>
   ` : `
   <div class="card">
-    <div class="card-title">💰 平台余额</div>
+    <div class="card-title">📦 套餐信息</div>
     <div style="text-align:center; padding:20px; color:var(--muted);">
       <p>暂未获取到用量信息</p>
       <p style="font-size:12px; margin-top:8px;">请先在 VS Code 中执行 "刷新用量信息"</p>

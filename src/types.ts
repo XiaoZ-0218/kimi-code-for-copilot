@@ -1,16 +1,40 @@
-/** Balance/usage info fetched from Kimi Code API. */
+/** Kimi Code usage info fetched from GET /v1/usages */
+export interface KimiUsage {
+  /** Plan name: Andante / Moderato / Allegretto / Allegro */
+  copilotPlan: string;
+  /** Quota reset date string */
+  quotaResetDate: string;
+  /** Premium interactions quota */
+  premium: {
+    entitlement: number;
+    remaining: number;
+  };
+  /** Detailed usage tiers */
+  tiers: KimiUsageTier[];
+  /** Timestamp of last fetch */
+  fetchedAt: number;
+}
+
+export interface KimiUsageTier {
+  name: string;
+  /** Usage percentage 0-100 */
+  utilization: number;
+  /** Human-readable label */
+  label: string;
+  /** Current used / limit */
+  used?: number;
+  limit?: number;
+  /** Reset time string */
+  resetsAt?: string;
+}
+
+/** Balance/usage info fetched from Kimi Code API (legacy - replaced by KimiUsage). */
 export interface KimiBalance {
-  /** Whether the API returned valid balance data. */
   available: boolean;
-  /** Total granted amount (if pay-per-token). */
   totalGranted?: number;
-  /** Total used amount. */
   totalUsed?: number;
-  /** Total remaining balance. */
   totalBalance?: number;
-  /** Currency (CNY, USD, etc.). */
   currency?: string;
-  /** Timestamp of last fetch. */
   fetchedAt?: number;
 }
 
@@ -20,13 +44,5 @@ export interface SessionUsage {
   completionTokens: number;
   reasoningTokens: number;
   requestCount: number;
-  /** Tracked from last refresh. */
   startTime: number;
-}
-
-/** Pricing tier for a model family. */
-export interface PricingTier {
-  input: number;
-  output: number;
-  cacheHit?: number;
 }

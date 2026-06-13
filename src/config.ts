@@ -31,3 +31,11 @@ export function getModelId(): string {
 export function getMaxTokens(): number {
   return getConfig().get('maxTokens', 0);
 }
+
+export function getUsageRefreshInterval(): number {
+  return getConfig().get('usageRefreshInterval', 30);
+}
+
+export function getDisplayRefreshInterval(): number {
+  return getConfig().get('displayRefreshInterval', 1);
+}
