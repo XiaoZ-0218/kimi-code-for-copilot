@@ -80,15 +80,19 @@ $(pulse) 12.5K tok $(credit-card) ¥49.00
 
 ### 用量看板（手机可访问）
 
-执行 **Kimi Code: Start Usage Dashboard**，终端输出局域网地址：
+执行 **Kimi Code: Start Usage Dashboard** 启动看板。默认情况下看板仅可在本机访问：
 
 ```
 📡 用量看板已启动
-   本地:    http://localhost:54321
-   局域网:  http://192.168.1.100:54321
+   本地: http://localhost:54321
 ```
 
-用手机浏览器打开局域网地址，即可看到实时刷新的精美仪表盘，包含：
+如需在同一局域网内的手机或其他设备上访问，请在设置中开启：
+
+- `kimi-code-copilot.dashboard.allowLan` — 允许局域网访问（每次启动前会弹窗确认）
+- `kimi-code-copilot.dashboard.accessToken` — 可选访问 Token，访问时需要 `?token=你的Token`
+
+看板页面包含：
 
 - 本次会话请求次数、Token 明细
 - 平台剩余额度及使用进度条
@@ -122,6 +126,8 @@ $(pulse) 12.5K tok $(credit-card) ¥49.00
 | `kimi-code-copilot.modelId` | `string` | `kimi-for-coding` | 模型 ID，Kimi 建议保持默认 |
 | `kimi-code-copilot.maxTokens` | `number` | `0` | 单次最大输出 Token，`0` 表示模型默认 |
 | `kimi-code-copilot.debug` | `boolean` | `false` | 开启调试日志（输出通道） |
+| `kimi-code-copilot.dashboard.allowLan` | `boolean` | `false` | 允许用量看板局域网访问 |
+| `kimi-code-copilot.dashboard.accessToken` | `string` | `''` | 看板访问 Token（可选） |
 
 ---
 

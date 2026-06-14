@@ -5,6 +5,32 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 🛡️ 安全
+
+- 用量看板默认仅监听 `127.0.0.1`，不再向全网暴露
+- 新增 `kimi-code-copilot.dashboard.allowLan` 设置，开启局域网访问前需要用户确认
+- 新增 `kimi-code-copilot.dashboard.accessToken` 设置，可为看板设置访问 Token
+- 看板响应增加 CSP、`X-Frame-Options`、`X-Content-Type-Options` 等安全头
+- 对看板和状态栏 Tooltip 中所有 API 返回的数据进行 HTML/Markdown 转义，防止 XSS 和命令注入
+- 状态栏 Tooltip 的 Markdown 不再全局信任，仅允许已知的刷新命令
+- `baseUrl` 强制要求 HTTPS 协议，防止 API Key 被明文发送
+- 所有外部请求增加超时控制
+
+### 🔧 改进
+
+- 重写 SSE 流处理，移除 `async` Promise executor，正确处理取消操作
+- 修复 `max_tokens` 在未配置时仍发送默认值的问题
+- 修复看板“已用时间”显示语义
+- 优化 deactivate 生命周期，确保资源正确释放
+
+### ✨ 新增
+
+- 安装/更新后显示一次性欢迎通知
+- 新增 Walkthrough（快速开始指南）：获取 API Key、选择模型、追踪用量
+- 新增 `Kimi Code: Open Welcome` 命令
+
 ## [1.0.0] - 2026-06-14
 
 ### ✨ 新增
