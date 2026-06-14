@@ -141,29 +141,25 @@ export async function prepareChatRequest(params: {
   };
 }
 
-function convertToOpenAIFormat(
-  messages: readonly vscode.LanguageModelChatRequestMessage[],
-): Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }> {
-  const result: Array<{
-    role: string;
-    content: string | null;
-    tool_calls?: unknown[];
-    tool_call_id?: string;
-    name?: string;
-  }> = [];
+interface OpenAIMessage {
+  role: string;
+  content: string | null;
+  tool_calls?: unknown[];
+  tool_call_id?: string;
+  name?: string;
+}
+
+function convertToOpenAIFormat(messages: readonly vscode.LanguageModelChatRequestMessage[]): OpenAIMessage[] {
+  const result: OpenAIMessage[] = [];
 
   for (const msg of messages) {
-    const role = mapRole(msg.role);
-    if (!role) continue;
-
-    let content = '';
+    const textParts: string[] = [];
     const toolCalls: unknown[] = [];
-    let toolCallId: string | undefined;
-    let toolCallName: string | undefined;
+    const toolResults: { callId: string; content: string }[] = [];
 
     for (const part of msg.content) {
       if (part instanceof vscode.LanguageModelTextPart) {
-        content += part.value;
+        textParts.push(part.value);
       } else if (part instanceof vscode.LanguageModelToolCallPart) {
         toolCalls.push({
           id: part.callId,
@@ -174,35 +170,39 @@ function convertToOpenAIFormat(
           },
         });
       } else if (part instanceof vscode.LanguageModelToolResultPart) {
-        toolCallId = part.callId;
-        content += part.content
+        const resultContent = part.content
           .map((c) => {
             if (c instanceof vscode.LanguageModelTextPart) return c.value;
             return JSON.stringify(c);
           })
           .join('');
+        toolResults.push({ callId: part.callId, content: resultContent });
       }
     }
 
-    if (toolCalls.length > 0) {
-      result.push({ role, content: null, tool_calls: toolCalls });
-    } else if (toolCallId) {
-      result.push({ role, content: content || '', tool_call_id: toolCallId, name: toolCallName });
+    const textContent = textParts.join('') || null;
+
+    if (msg.role === vscode.LanguageModelChatMessageRole.Assistant) {
+      // Assistant messages may contain text and/or tool calls.
+      if (toolCalls.length > 0 || textParts.length > 0) {
+        const assistantMsg: OpenAIMessage = { role: 'assistant', content: textContent };
+        if (toolCalls.length > 0) {
+          assistantMsg.tool_calls = toolCalls;
+        }
+        result.push(assistantMsg);
+      }
     } else {
-      result.push({ role, content: content || '' });
+      // User messages may contain regular text and/or tool results.
+      // Tool results must be emitted as separate `role: 'tool'` messages,
+      // each with the matching tool_call_id, so the API can pair them.
+      if (textParts.length > 0) {
+        result.push({ role: 'user', content: textContent });
+      }
+      for (const tr of toolResults) {
+        result.push({ role: 'tool', content: tr.content || '', tool_call_id: tr.callId });
+      }
     }
   }
 
   return result;
-}
-
-function mapRole(role: vscode.LanguageModelChatMessageRole): string | null {
-  switch (role) {
-    case vscode.LanguageModelChatMessageRole.User:
-      return 'user';
-    case vscode.LanguageModelChatMessageRole.Assistant:
-      return 'assistant';
-    default:
-      return null;
-  }
 }
