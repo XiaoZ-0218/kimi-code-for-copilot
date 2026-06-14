@@ -244,10 +244,11 @@ export class BalanceTracker {
         const pct = Math.round(weeklyPct);
         const resetMs = this.usage.quotaResetDate !== 'N/A' ? new Date(this.usage.quotaResetDate).getTime() - Date.now() : 0;
         const hoursLeft = resetMs / (1000 * 60 * 60);
-        const timeWindowsLeft = hoursLeft / 5;
+        // Whole 5-hour windows remaining until weekly reset; current partial window is discarded.
+        const windowsLeft = Math.max(0, Math.floor(hoursLeft / 5));
         sections.push('**本周用量（占周额度）**');
         sections.push(`${renderBar(weeklyPct)} ${pct}% · 重置 ${formatCountdown(resetMs)}`);
-        sections.push(`时间上还剩 ${timeWindowsLeft.toFixed(1)} 个 5h`);
+        sections.push(`剩余 ${windowsLeft} 个 5h`);
         sections.push('');
       }
 
