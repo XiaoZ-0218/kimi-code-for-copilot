@@ -113,7 +113,7 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
     });
 
     logger.info(
-      `[req] model=${prepared.model} thinking=${prepared.thinking} messages=${messages.length} chars=${prepared.inputCharCount}`,
+      `[req] url=${prepared.url} model=${prepared.model} thinking=${prepared.thinking} messages=${messages.length} chars=${prepared.inputCharCount}`,
     );
 
     const self = this;

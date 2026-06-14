@@ -16,12 +16,15 @@ export function getBaseUrl(): string {
 
 export function getApiUrl(path: string): string {
   const base = getBaseUrl();
-  // If path starts with /, treat as absolute from the origin
-  if (path.startsWith('/')) {
-    const url = new URL(getBaseUrl());
-    return `${url.protocol}//${url.host}${path}`;
+  const normalizedPath = path.replace(/^\/+/, '');
+
+  // Default base URL already ends with /v1, but callers also pass /v1/...
+  // Avoid producing .../v1/v1/...
+  if (base.endsWith('/v1') && normalizedPath.startsWith('v1/')) {
+    return new URL(normalizedPath.slice(3), `${base}/`).toString();
   }
-  return new URL(path.replace(/^\/+/, ''), `${base}/`).toString();
+
+  return new URL(normalizedPath, `${base}/`).toString();
 }
 
 export function getModelId(): string {

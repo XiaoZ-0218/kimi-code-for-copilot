@@ -108,6 +108,7 @@ export class BalanceTracker {
 
     try {
       const url = getApiUrl('/v1/usages');
+      logger.debug(`[usage] GET ${url}`);
       const res = await fetch(url, {
         method: 'GET',
         headers: {
