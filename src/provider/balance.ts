@@ -335,7 +335,6 @@ function parseKimiUsage(raw: KimiUsageRaw): KimiUsage {
     if (limit <= 0) continue;
 
     const used = toNum(detail.used);
-    const rem = toNum(detail.remaining);
     tiers.push({
       name: 'window',
       utilization: (used / limit) * 100,
