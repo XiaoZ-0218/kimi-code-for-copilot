@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { logger } from '../logger';
 import { getApiUrl, getModelId, getMaxTokens } from '../config';
 import { MAX_TOOLS_PER_REQUEST } from '../consts';
 
@@ -50,8 +49,8 @@ export async function prepareChatRequest(params: {
   }
 
   // Convert tool definitions
-  let tools: object[] | undefined;
-  let toolChoice: string | object | undefined;
+  let tools: Array<{ type: 'function'; function: { name: string; description: string; parameters: object } }> | undefined;
+  let toolChoice: string | { type: 'function'; function: { name: string } } | undefined;
 
   if (options.tools && options.tools.length > 0) {
     if (options.tools.length > MAX_TOOLS_PER_REQUEST) {
@@ -71,8 +70,7 @@ export async function prepareChatRequest(params: {
 
     toolChoice = 'auto';
     if (options.toolMode === vscode.LanguageModelChatToolMode.Required && tools.length === 1) {
-      const tool = tools[0] as { type: string; function: { name: string } };
-      toolChoice = { type: 'function', function: { name: tool.function.name } };
+      toolChoice = { type: 'function', function: { name: tools[0].function.name } };
     }
   }
 
@@ -104,8 +102,9 @@ export async function prepareChatRequest(params: {
       body.temperature = requestedTemp;
     }
   } else {
-    // Fast mode: Kimi Code only accepts temperature 0.6 (400 otherwise).
-    body.temperature = 0.6;
+    // Fast mode: Kimi Code defaults to 0.6. Respect an explicit user override
+    // but keep the default if none is provided to avoid unexpected 400 errors.
+    body.temperature = typeof requestedTemp === 'number' ? requestedTemp : 0.6;
   }
 
   const mo = options.modelOptions;
@@ -118,8 +117,9 @@ export async function prepareChatRequest(params: {
   }
 
   const configuredMaxTokens = getMaxTokens();
-  const maxTokens = configuredMaxTokens > 0 ? configuredMaxTokens : 65536;
-  body.max_tokens = maxTokens;
+  if (configuredMaxTokens > 0) {
+    body.max_tokens = configuredMaxTokens;
+  }
 
   const inputCharCount = openaiMessages.reduce(
     (sum, m) => sum + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length),

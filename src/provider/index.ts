@@ -124,8 +124,6 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
       `[req] url=${prepared.url} model=${prepared.model} thinking=${prepared.thinking} messages=${messages.length} chars=${prepared.inputCharCount}`,
     );
 
-    const self = this;
-
     await streamChatCompletion(
       prepared.url,
       prepared.headers,
@@ -143,18 +141,19 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
             ),
           );
         },
-        onComplete(usage) {
+        onComplete: (usage) => {
           if (usage) {
             const jsonBytes = new TextEncoder().encode(JSON.stringify(usage));
             progress.report(
               new vscode.LanguageModelDataPart(jsonBytes, USAGE_MIME_TYPE),
             );
-            self.balanceTracker.recordUsage(prepared.model, usage);
+            this.balanceTracker.recordUsage(prepared.model, usage);
           }
         },
         onError(error) {
           logger.error(`Stream error: ${error.message}`);
-          throw error;
+          // Do not re-throw here; streamChatCompletion will reject with the
+          // same error and the caller handles it.
         },
       },
       token,
