@@ -189,7 +189,7 @@ export class BalanceTracker {
       const pct = String(Math.round(windowTier.utilization));
       const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
       const resetText = formatCountdown(resetMs);
-      this.statusBar.text = `$(sparkle) KIMI 5h ${pct}% 距离重置 ${resetText}`;
+      this.statusBar.text = `$(sparkle) KIMI · 5h · ${pct}% · ${resetText}`;
     } else {
       // Fallback: show premium remaining
       const rem = this.usage.premium.remaining;
@@ -223,28 +223,36 @@ export class BalanceTracker {
     // Plan usage
     if (this.usage) {
       sections.push('---');
-      sections.push(`**📦 ${this.usage.copilotPlan} 套餐**`);
-      sections.push('');
 
-      sections.push('| 额度类型 | 使用情况 | 进度 |');
-      sections.push('|---|---:|---:|');
+      const windowTier = findWindowTier(this.usage.tiers);
+      const weeklyEnt = this.usage.premium.entitlement;
+      const weeklyRem = this.usage.premium.remaining;
+      const weeklyUsed = weeklyEnt - weeklyRem;
+      const weeklyPct = weeklyEnt > 0 ? (weeklyUsed / weeklyEnt) * 100 : 0;
 
-      for (const tier of this.usage.tiers) {
-        const usage = tier.limit ? `${tier.used}/${tier.limit}` : `${Math.round(tier.utilization)}%`;
-        sections.push(`| ${tier.label} | ${usage} | ${renderBar(tier.utilization)} ${Math.round(tier.utilization)}% |`);
+      // 5h window
+      if (windowTier) {
+        const pct = Math.round(windowTier.utilization);
+        const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
+        sections.push('**5h 频限**');
+        sections.push(`${renderBar(windowTier.utilization)} ${pct}% · 重置 ${formatCountdown(resetMs)}`);
+        sections.push('');
       }
 
-      if (this.usage.premium.entitlement > 0 && this.usage.tiers.length === 0) {
-        const rem = this.usage.premium.remaining;
-        const ent = this.usage.premium.entitlement;
-        const used = ent - rem;
-        const pct = ent > 0 ? (used / ent) * 100 : 0;
-        sections.push(`| Premium 请求 | ${used}/${ent} | ${renderBar(pct)} ${Math.round(pct)}% |`);
+      // Weekly usage
+      if (weeklyEnt > 0) {
+        const remainingWindows = windowTier?.limit ? weeklyRem / windowTier.limit : 0;
+        const pct = Math.round(weeklyPct);
+        const resetMs = this.usage.quotaResetDate !== 'N/A' ? new Date(this.usage.quotaResetDate).getTime() - Date.now() : 0;
+        sections.push('**本周用量**');
+        sections.push(`${renderBar(weeklyPct)} ${pct}% · 重置 ${formatCountdown(resetMs)} · 还可触发 ${remainingWindows.toFixed(1)} 次 5h`);
+        sections.push('');
       }
 
-      sections.push('');
-      sections.push(`🔄 重置日期：${this.usage.quotaResetDate}`);
-      sections.push(`🕐 数据更新：${new Date(this.usage.fetchedAt).toLocaleTimeString()}`);
+      if (this.usage.quotaResetDate !== 'N/A') {
+        sections.push(`下次重置：${formatDateTime(new Date(this.usage.quotaResetDate))}`);
+      }
+      sections.push(`数据更新：${formatDateTime(new Date(this.usage.fetchedAt))}`);
       sections.push('');
     }
 
@@ -266,8 +274,7 @@ export class BalanceTracker {
 
     // Footer
     sections.push('---');
-    sections.push('💡 点击状态栏打开管理菜单');
-    sections.push('🌐 [Kimi Code 控制台](https://www.kimi.com/code/console)');
+    sections.push(`[🔄 刷新用量](command:kimi-code-copilot.refreshUsage) · [打开控制台](https://www.kimi.com/code/console)`);
 
     const md = new vscode.MarkdownString(sections.join('\n'));
     md.supportHtml = true;
@@ -401,6 +408,15 @@ function formatCountdown(ms: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${hours}h${String(minutes).padStart(2, '0')}m`;
+}
+
+function formatDateTime(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d} ${h}:${min}`;
 }
 
 function findWindowTier(tiers: KimiUsageTier[]): KimiUsageTier | undefined {
