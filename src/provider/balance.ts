@@ -167,87 +167,105 @@ export class BalanceTracker {
   // ── Status bar ──
 
   private updateStatusBar() {
-    const parts: string[] = [];
-
     // Dashboard takes priority
     if (this.dashboardRunning) {
-      parts.push(`$(radio-tower) Kimi :${this.dashboardPort}`);
-      this.statusBar.text = parts.join(' ');
+      this.statusBar.text = `$(radio-tower) Kimi :${this.dashboardPort}`;
       this.statusBar.tooltip = this.buildTooltip();
       this.statusBar.show();
       return;
     }
 
-    // Always show plan + remaining (compact)
+    const parts: string[] = [];
+
+    // Session token count first (matches README mockup)
+    const totalTok = this.session.promptTokens + this.session.completionTokens;
+    if (totalTok > 0) {
+      parts.push(`$(pulse) ${formatNumber(totalTok)} tok`);
+    }
+
+    // Plan remaining
     if (this.usage) {
       const rem = this.usage.premium.remaining;
       const ent = this.usage.premium.entitlement;
       parts.push(`$(credit-card) ${rem}/${ent}`);
     } else {
-      parts.push('$(key) Kimi');
+      parts.push('$(key) Kimi Code');
     }
 
-    // Session token count
-    const totalTok = this.session.promptTokens + this.session.completionTokens;
-    if (totalTok > 0) {
-      parts.push(`$(pulse) ${formatNumber(totalTok)}`);
-    }
-
-    this.statusBar.text = parts.join(' ');
+    this.statusBar.text = parts.join('   ');
     this.statusBar.tooltip = this.buildTooltip();
     this.statusBar.show();
   }
 
   private buildTooltip(): vscode.MarkdownString {
-    const lines: string[] = [];
+    const sections: string[] = [];
+
+    // Header
+    sections.push('### 🧠 Kimi Code for Copilot');
+    sections.push(this.usage ? '✅ API Key 已配置' : '⚠️ 未设置 API Key');
+    sections.push('');
 
     // Dashboard
     if (this.dashboardRunning) {
-      lines.push('**📡 看板运行中**');
-      lines.push(`端口: ${this.dashboardPort}`);
-      if (this.dashboardLanUrl) lines.push(`局域网: ${this.dashboardLanUrl}`);
-      lines.push('---');
+      sections.push('---');
+      sections.push('**📡 用量看板运行中**');
+      sections.push(`- 端口：${this.dashboardPort}`);
+      if (this.dashboardLanUrl) {
+        sections.push(`- 局域网：${this.dashboardLanUrl}`);
+      }
+      sections.push('');
     }
-
-    // API key status
-    lines.push(this.usage ? '✅ API Key 已配置' : '⚠️ 未设置 API Key');
-    lines.push('');
 
     // Plan usage
     if (this.usage) {
-      lines.push(`**${this.usage.copilotPlan} 套餐**`);
+      sections.push('---');
+      sections.push(`**📦 ${this.usage.copilotPlan} 套餐**`);
+      sections.push('');
+
+      sections.push('| 额度类型 | 使用情况 | 进度 |');
+      sections.push('|---|---:|---:|');
+
       for (const tier of this.usage.tiers) {
-        const bar = renderBar(tier.utilization);
-        const detail = tier.limit ? ` (${tier.used}/${tier.limit})` : '';
-        lines.push(`${tier.label}: ${bar} ${Math.round(tier.utilization)}%${detail}`);
+        const usage = tier.limit ? `${tier.used}/${tier.limit}` : `${Math.round(tier.utilization)}%`;
+        sections.push(`| ${tier.label} | ${usage} | ${renderBar(tier.utilization)} ${Math.round(tier.utilization)}% |`);
       }
+
       if (this.usage.premium.entitlement > 0 && this.usage.tiers.length === 0) {
-        lines.push(`Premium: ${this.usage.premium.remaining}/${this.usage.premium.entitlement}`);
+        const rem = this.usage.premium.remaining;
+        const ent = this.usage.premium.entitlement;
+        const used = ent - rem;
+        const pct = ent > 0 ? (used / ent) * 100 : 0;
+        sections.push(`| Premium 请求 | ${used}/${ent} | ${renderBar(pct)} ${Math.round(pct)}% |`);
       }
-      lines.push(`重置日期: ${this.usage.quotaResetDate}`);
-      const fetchTime = new Date(this.usage.fetchedAt).toLocaleTimeString();
-      lines.push(`数据更新: ${fetchTime}`);
-      lines.push('');
+
+      sections.push('');
+      sections.push(`🔄 重置日期：${this.usage.quotaResetDate}`);
+      sections.push(`🕐 数据更新：${new Date(this.usage.fetchedAt).toLocaleTimeString()}`);
+      sections.push('');
     }
 
     // Session
+    sections.push('---');
+    sections.push('**📊 本次会话**');
     if (this.session.requestCount > 0) {
-      lines.push('**本次会话**');
-      lines.push(`请求: ${this.session.requestCount}`);
-      lines.push(`输入: ${formatNumber(this.session.promptTokens)} tok · 输出: ${formatNumber(this.session.completionTokens)} tok`);
-      lines.push(`耗时: ${formatDuration(Date.now() - this.session.startTime)}`);
-      lines.push('');
+      sections.push('| 指标 | 数值 |');
+      sections.push('|---:|---:|');
+      sections.push(`| 请求次数 | ${this.session.requestCount} |`);
+      sections.push(`| 输入 Tokens | ${formatNumber(this.session.promptTokens)} |`);
+      sections.push(`| 输出 Tokens | ${formatNumber(this.session.completionTokens)} |`);
+      sections.push(`| 总计 Tokens | ${formatNumber(this.session.promptTokens + this.session.completionTokens)} |`);
+      sections.push(`| 已用时间 | ${formatDuration(Date.now() - this.session.startTime)} |`);
     } else {
-      lines.push('**本次会话**');
-      lines.push('暂无活动');
-      lines.push('');
+      sections.push('暂无活动');
     }
+    sections.push('');
 
-    lines.push('---');
-    lines.push('点击打开管理菜单');
-    lines.push('控制台: https://www.kimi.com/code/console');
+    // Footer
+    sections.push('---');
+    sections.push('💡 点击状态栏打开管理菜单');
+    sections.push('🌐 [Kimi Code 控制台](https://www.kimi.com/code/console)');
 
-    const md = new vscode.MarkdownString(lines.join('\n'));
+    const md = new vscode.MarkdownString(sections.join('\n'));
     md.supportHtml = true;
     md.isTrusted = true;
     return md;
