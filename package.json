@@ -3,7 +3,7 @@
   "displayName": "Kimi Code for Copilot — Usage Tracking",
   "description": "Kimi Code (K2.7) in GitHub Copilot Chat. Track CodingPlan usage and quota in real-time status bar. BYOK integration with one-click setup.",
   "icon": "resources/icon.png",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "xiaoz",
   "license": "MIT",
   "repository": {
