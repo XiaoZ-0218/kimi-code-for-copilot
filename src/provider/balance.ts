@@ -245,7 +245,8 @@ export class BalanceTracker {
         const pct = Math.round(weeklyPct);
         const resetMs = this.usage.quotaResetDate !== 'N/A' ? new Date(this.usage.quotaResetDate).getTime() - Date.now() : 0;
         sections.push('**本周用量**');
-        sections.push(`${renderBar(weeklyPct)} ${pct}% · 重置 ${formatCountdown(resetMs)} · 还可触发 ${remainingWindows.toFixed(1)} 次 5h`);
+        sections.push(`${renderBar(weeklyPct)} ${pct}% · 重置 ${formatCountdown(resetMs)}`);
+        sections.push(`本周还剩 ${remainingWindows.toFixed(1)} 个 5h`);
         sections.push('');
       }
 
