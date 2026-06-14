@@ -184,7 +184,9 @@ export class BalanceTracker {
 
     const windowTier = findWindowTier(this.usage.tiers);
     if (windowTier) {
-      const pct = windowTier.utilization.toFixed(2);
+      // API returns integer used/limit; the percentage is derived from them.
+      // Status bar uses integer % for compactness; tooltip keeps the raw count.
+      const pct = String(Math.round(windowTier.utilization));
       const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
       const resetText = formatCountdown(resetMs);
       this.statusBar.text = `$(sparkle) KIMI 5h ${pct}% 距离重置 ${resetText}`;
