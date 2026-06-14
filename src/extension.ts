@@ -12,7 +12,9 @@ let dashboardServer: DashboardServer | undefined;
 export function activate(context: vscode.ExtensionContext) {
   const extVersion = context.extension.packageJSON.version;
   const vscodeVersion = vscode.version;
-  const userAgent = `kimi-code-for-copilot/${extVersion} VSCode/${vscodeVersion}`;
+  // Kimi Code API requires an approved Coding Agent User-Agent.
+  // "Kilo-Code/1.0" is whitelisted; append our own identifier for debugging.
+  const userAgent = `Kilo-Code/1.0 (kimi-code-for-copilot/${extVersion}; VSCode/${vscodeVersion})`;
 
   logger.setDebugEnabled(getDebugLoggingEnabled());
   logger.info(`Kimi Code for Copilot 启动 version=${extVersion} debug=${getDebugLoggingEnabled()}`);

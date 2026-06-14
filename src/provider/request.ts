@@ -33,8 +33,9 @@ export async function prepareChatRequest(params: {
   messages: readonly vscode.LanguageModelChatRequestMessage[];
   options: vscode.ProvideLanguageModelChatResponseOptions;
   token: vscode.CancellationToken;
+  userAgent: string;
 }): Promise<PreparedRequest> {
-  const { authManager, modelInfo, messages, options, token } = params;
+  const { authManager, modelInfo, messages, options, token, userAgent } = params;
 
   const apiKey = await authManager.getApiKey();
   if (!apiKey) throw new Error('Kimi Code API key not configured');
@@ -126,6 +127,7 @@ export async function prepareChatRequest(params: {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
+      'User-Agent': userAgent,
     },
     body: JSON.stringify(body),
     model: modelId,

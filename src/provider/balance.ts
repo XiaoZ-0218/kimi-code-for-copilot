@@ -272,70 +272,96 @@ export class BalanceTracker {
 // ── Kimi API response parser ──
 
 interface KimiUsageRaw {
-  copilot_plan?: string;
-  quota_reset_date?: string;
-  quota_snapshots?: {
-    premium_interactions?: { entitlement?: number; remaining?: number };
-  };
-  usage?: Array<{
-    limit?: number;
-    remaining?: number;
+  /** Primary quota (string-encoded numbers from Kimi). */
+  usage?: {
+    limit?: string;
+    remaining?: string;
     resetTime?: string;
-    period_limit?: number;
-    period_remaining?: number;
+  };
+  /** Windowed rate/concurrency limits. */
+  limits?: Array<{
+    window?: { duration?: number; timeUnit?: string };
+    detail?: {
+      limit?: string;
+      used?: string;
+      remaining?: string;
+      resetTime?: string;
+    };
   }>;
+  /** Overall quota. */
+  totalQuota?: {
+    limit?: string;
+    remaining?: string;
+  };
+}
+
+function toNum(value: string | number | undefined): number {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === 'number') return value;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function formatWindowLabel(window?: { duration?: number; timeUnit?: string }): string {
+  const duration = window?.duration ?? 0;
+  const unit = window?.timeUnit ?? '';
+  if (duration <= 0) return '窗口额度';
+  if (unit.includes('MINUTE')) return `${duration} 分钟窗口`;
+  if (unit.includes('HOUR')) return `${duration} 小时窗口`;
+  if (unit.includes('DAY')) return `${duration} 天窗口`;
+  return `${duration} 窗口`;
 }
 
 function parseKimiUsage(raw: KimiUsageRaw): KimiUsage {
-  const premium = raw.quota_snapshots?.premium_interactions ?? {};
-  const tiers: KimiUsageTier[] = [];
+  const primary = raw.usage ?? {};
+  const total = raw.totalQuota ?? {};
 
-  for (const item of raw.usage ?? []) {
-    if (item.limit !== undefined && item.limit > 0) {
-      const remaining = item.remaining ?? 0;
-      const used = item.limit - remaining;
-      tiers.push({
-        name: 'weekly',
-        utilization: (used / item.limit) * 100,
-        label: '周额度',
-        used,
-        limit: item.limit,
-        resetsAt: item.resetTime,
-      });
-    }
-    if (item.period_limit !== undefined && item.period_limit > 0) {
-      const remaining = item.period_remaining ?? 0;
-      const used = item.period_limit - remaining;
-      tiers.push({
-        name: '5hour',
-        utilization: (used / item.period_limit) * 100,
-        label: '5小时窗口',
-        used,
-        limit: item.period_limit,
-      });
-    }
+  // Prefer the primary quota for the top-level premium display.
+  let entitlement = toNum(primary.limit);
+  let remaining = toNum(primary.remaining);
+  const quotaResetDate = primary.resetTime ?? 'N/A';
+
+  // Fall back to totalQuota if primary is missing.
+  if (entitlement <= 0) {
+    entitlement = toNum(total.limit);
+    remaining = toNum(total.remaining);
   }
 
-  if (tiers.length === 0 && premium.entitlement && premium.entitlement > 0) {
-    const remaining = premium.remaining ?? 0;
-    const used = premium.entitlement - remaining;
+  const tiers: KimiUsageTier[] = [];
+
+  for (const item of raw.limits ?? []) {
+    const detail = item.detail ?? {};
+    const limit = toNum(detail.limit);
+    if (limit <= 0) continue;
+
+    const used = toNum(detail.used);
+    const rem = toNum(detail.remaining);
+    tiers.push({
+      name: 'window',
+      utilization: (used / limit) * 100,
+      label: formatWindowLabel(item.window),
+      used,
+      limit,
+      resetsAt: detail.resetTime,
+    });
+  }
+
+  if (entitlement > 0 && tiers.length === 0) {
+    const used = entitlement - remaining;
     tiers.push({
       name: 'premium',
-      utilization: (used / premium.entitlement) * 100,
+      utilization: (used / entitlement) * 100,
       label: 'Premium 请求',
       used,
-      limit: premium.entitlement,
-      resetsAt: raw.quota_reset_date,
+      limit: entitlement,
+      resetsAt: quotaResetDate,
     });
   }
 
   return {
-    copilotPlan: raw.copilot_plan ?? 'Unknown',
-    quotaResetDate: raw.quota_reset_date ?? 'N/A',
-    premium: {
-      entitlement: premium.entitlement ?? 0,
-      remaining: premium.remaining ?? 0,
-    },
+    copilotPlan: 'Kimi Code',
+    quotaResetDate,
+    premium: { entitlement, remaining },
     tiers,
     fetchedAt: Date.now(),
   };

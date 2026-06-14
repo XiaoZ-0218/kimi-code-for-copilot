@@ -18,7 +18,7 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
     private context: vscode.ExtensionContext,
     private authManager: AuthManager,
     statusBar: vscode.StatusBarItem,
-    userAgent: string,
+    private userAgent: string,
   ) {
     this.balanceTracker = new BalanceTracker(
       statusBar,
@@ -109,6 +109,7 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
       messages,
       options,
       token,
+      userAgent: this.userAgent,
     });
 
     logger.info(

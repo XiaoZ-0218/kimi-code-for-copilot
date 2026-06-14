@@ -98,8 +98,13 @@ export function streamChatCompletion(
 
             if (!choice) continue;
 
-            // Handle text content
+            // Handle text / reasoning content
             const delta = choice.delta;
+            if (delta?.reasoning_content) {
+              // In thinking mode Kimi streams reasoning before the final answer.
+              // Copilot Chat has no dedicated reasoning part, so surface it as text.
+              callbacks.onData(delta.reasoning_content);
+            }
             if (delta?.content) {
               callbacks.onData(delta.content);
             }
