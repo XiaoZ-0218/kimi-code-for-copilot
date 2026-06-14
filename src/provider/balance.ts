@@ -169,30 +169,32 @@ export class BalanceTracker {
   private updateStatusBar() {
     // Dashboard takes priority
     if (this.dashboardRunning) {
-      this.statusBar.text = `$(radio-tower) Kimi :${this.dashboardPort}`;
+      this.statusBar.text = `$(radio-tower) KIMI :${this.dashboardPort}`;
       this.statusBar.tooltip = this.buildTooltip();
       this.statusBar.show();
       return;
     }
 
-    const parts: string[] = [];
-
-    // Session token count first (matches README mockup)
-    const totalTok = this.session.promptTokens + this.session.completionTokens;
-    if (totalTok > 0) {
-      parts.push(`$(pulse) ${formatNumber(totalTok)} tok`);
+    if (!this.usage) {
+      this.statusBar.text = '$(sparkle) KIMI';
+      this.statusBar.tooltip = this.buildTooltip();
+      this.statusBar.show();
+      return;
     }
 
-    // Plan remaining
-    if (this.usage) {
+    const windowTier = findWindowTier(this.usage.tiers);
+    if (windowTier) {
+      const pct = windowTier.utilization.toFixed(2);
+      const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
+      const resetText = formatCountdown(resetMs);
+      this.statusBar.text = `$(sparkle) KIMI 5h ${pct}% 距离重置 ${resetText}`;
+    } else {
+      // Fallback: show premium remaining
       const rem = this.usage.premium.remaining;
       const ent = this.usage.premium.entitlement;
-      parts.push(`$(credit-card) ${rem}/${ent}`);
-    } else {
-      parts.push('$(key) Kimi Code');
+      this.statusBar.text = `$(sparkle) KIMI ${rem}/${ent}`;
     }
 
-    this.statusBar.text = parts.join('   ');
     this.statusBar.tooltip = this.buildTooltip();
     this.statusBar.show();
   }
@@ -389,5 +391,18 @@ function renderBar(pct: number): string {
   const filled = Math.round(pct / 10);
   const empty = 10 - filled;
   return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return '0h00m';
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h${String(minutes).padStart(2, '0')}m`;
+}
+
+function findWindowTier(tiers: KimiUsageTier[]): KimiUsageTier | undefined {
+  // Prefer the 5-hour (300-minute) window; fall back to any window tier.
+  return tiers.find((t) => t.name === 'window' && t.resetsAt) ?? tiers.find((t) => t.name === 'window');
 }
 
