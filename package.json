@@ -105,6 +105,10 @@
         "command": "kimi-code-copilot.stopDashboard",
         "title": "Kimi Code: Stop Usage Dashboard",
         "icon": "$(circle-slash)"
+      },
+      {
+        "command": "kimi-code-copilot.openWelcome",
+        "title": "Kimi Code: Open Welcome"
       }
     ],
     "configuration": {
@@ -144,9 +148,55 @@
           "minimum": 1,
           "maximum": 10,
           "description": "Interval in seconds for updating the status bar display (does not call API). Minimum 1s."
+        },
+        "kimi-code-copilot.dashboard.allowLan": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow the usage dashboard to be accessed from other devices on the same network. Requires an explicit confirmation on each start."
+        },
+        "kimi-code-copilot.dashboard.accessToken": {
+          "type": "string",
+          "default": "",
+          "description": "Optional access token required to open the usage dashboard (?token=...). Leave empty to disable."
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "kimiCodeGettingStarted",
+        "title": "Kimi Code for Copilot",
+        "description": "Connect Kimi Code (K2.7) to GitHub Copilot Chat and track your usage.",
+        "steps": [
+          {
+            "id": "getApiKey",
+            "title": "获取 API Key",
+            "description": "访问 [Kimi Code 控制台](https://www.kimi.com/code/console) 创建 API Key。\n\n创建后返回 VS Code，使用命令 **Kimi Code: Set API Key** 粘贴并验证。",
+            "media": {
+              "image": "resources/icon.png",
+              "altText": "Kimi Code console"
+            }
+          },
+          {
+            "id": "selectModel",
+            "title": "在 Copilot Chat 中选择模型",
+            "description": "打开 Copilot Chat（Cmd+Shift+I），在模型选择器中选择 **Kimi Code** 或 **Kimi Code (thinking)** 即可开始对话。",
+            "media": {
+              "image": "resources/icon.png",
+              "altText": "Select Kimi Code in Copilot Chat"
+            }
+          },
+          {
+            "id": "trackUsage",
+            "title": "追踪用量",
+            "description": "状态栏会实时显示 Token 消耗与剩余额度。\n\n需要手机查看？执行 **Kimi Code: Start Usage Dashboard** 启动本地看板（默认仅 localhost 可访问）。",
+            "media": {
+              "image": "resources/icon.png",
+              "altText": "Usage dashboard"
+            }
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('out', { recursive: true, force: true, maxRetries: 10 })\"",

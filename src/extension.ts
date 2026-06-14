@@ -4,7 +4,14 @@ import { AuthManager } from './auth';
 import { KimiCodeChatProvider } from './provider/index';
 import { DashboardServer } from './dashboard/server';
 import type { DashboardData } from './dashboard/server';
-import { getDebugLoggingEnabled, getUsageRefreshInterval, getDisplayRefreshInterval } from './config';
+import {
+  getDebugLoggingEnabled,
+  getUsageRefreshInterval,
+  getDisplayRefreshInterval,
+  getDashboardAllowLan,
+  getDashboardAccessToken,
+} from './config';
+import { WALKTHROUGH_ID, WELCOME_SHOWN_KEY } from './consts';
 
 let activeProvider: KimiCodeChatProvider | undefined;
 let dashboardServer: DashboardServer | undefined;
@@ -46,6 +53,13 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.Uri.parse('https://www.kimi.com/code/console'),
       );
     }),
+    vscode.commands.registerCommand('kimi-code-copilot.openWelcome', () => {
+      void vscode.commands.executeCommand(
+        'workbench.action.openWalkthrough',
+        WALKTHROUGH_ID,
+        false,
+      );
+    }),
   );
 
   // Create provider
@@ -71,20 +85,32 @@ export function activate(context: vscode.ExtensionContext) {
         if (e.affectsConfiguration('kimi-code-copilot.displayRefreshInterval')) {
           provider.balanceTracker.setDisplayRefreshInterval(getDisplayRefreshInterval() * 1000);
         }
+        if (e.affectsConfiguration('kimi-code-copilot.dashboard')) {
+          // Re-apply dashboard security options on next start.
+          dashboardServer?.setOptions({
+            allowLan: getDashboardAllowLan(),
+            accessToken: getDashboardAccessToken(),
+          });
+        }
       }),
     );
 
     // Dashboard server - data provider function
+    let dashboardStartTime = Date.now();
     const getDashboardData = (): DashboardData => ({
       session: provider.balanceTracker.getSession(),
       usage: provider.balanceTracker.getUsage(),
       serverUrl: dashboardServer?.isRunning()
         ? `http://localhost:${dashboardServer.getPort()}`
         : '未启动',
-      startTime: Date.now(),
+      startTime: dashboardStartTime,
     });
 
-    dashboardServer = new DashboardServer(getDashboardData);
+    dashboardServer = new DashboardServer(getDashboardData, {
+      host: '127.0.0.1',
+      allowLan: getDashboardAllowLan(),
+      accessToken: getDashboardAccessToken(),
+    });
 
     // Dashboard start command
     context.subscriptions.push(
@@ -108,7 +134,27 @@ export function activate(context: vscode.ExtensionContext) {
             return;
           }
 
+          // Apply current options right before starting.
+          dashboardServer!.setOptions({
+            allowLan: getDashboardAllowLan(),
+            accessToken: getDashboardAccessToken(),
+          });
+
+          // Confirm with the user when enabling LAN access.
+          if (getDashboardAllowLan()) {
+            const confirm = await vscode.window.showWarningMessage(
+              '用量看板将暴露到局域网，同一网络中的其他设备可以访问。是否继续？',
+              { modal: true },
+              '继续启动',
+              '取消',
+            );
+            if (confirm !== '继续启动') {
+              return;
+            }
+          }
+
           try {
+            dashboardStartTime = Date.now();
             const { port, urls } = await dashboardServer!.start();
             const localUrl = urls[0];
             const lanUrl = urls.length > 1 ? urls[1] : localUrl;
@@ -188,7 +234,7 @@ export function activate(context: vscode.ExtensionContext) {
                 : {
                     label: '$(radio-tower) 启动用量看板',
                     id: 'startDashboard',
-                    description: '局域网手机可访问',
+                    description: '默认仅本地访问',
                   },
               dashboardRunning
                 ? {
@@ -209,7 +255,11 @@ export function activate(context: vscode.ExtensionContext) {
                 label: '$(output) 显示日志',
                 id: 'showLogs',
               },
-            ].filter(Boolean) as { label: string; id: string; description?: string }[],
+              {
+                label: '$(question) 打开欢迎指南',
+                id: 'openWelcome',
+              },
+            ].filter((item): item is { label: string; id: string; description?: string } => Boolean(item)),
             {
               title: `管理 Kimi Code for Copilot (v${extVersion})`,
               placeHolder: '选择一个操作',
@@ -251,6 +301,13 @@ export function activate(context: vscode.ExtensionContext) {
             case 'showLogs':
               logger.show();
               break;
+            case 'openWelcome':
+              await vscode.commands.executeCommand(
+                'workbench.action.openWalkthrough',
+                WALKTHROUGH_ID,
+                false,
+              );
+              break;
           }
         },
       ),
@@ -286,8 +343,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Register the LM provider
     context.subscriptions.push(
-      vscode.lm.registerLanguageModelChatProvider('kimi-code', provider as vscode.LanguageModelChatProvider<vscode.LanguageModelChatInformation>),
+      vscode.lm.registerLanguageModelChatProvider('kimi-code', provider),
     );
+
+    // Show welcome walkthrough once after install/update.
+    void showWelcomeIfNeeded(context);
 
     logger.info('Kimi Code for Copilot 就绪');
   } catch (error) {
@@ -298,9 +358,32 @@ export function activate(context: vscode.ExtensionContext) {
   }
 }
 
-export function deactivate() {
-  void dashboardServer?.stop();
-  void activeProvider?.prepareForDeactivate();
+export async function deactivate(): Promise<void> {
+  await dashboardServer?.stop();
+  await activeProvider?.prepareForDeactivate();
   logger.info('Kimi Code for Copilot 已停用');
   logger.dispose();
+}
+
+async function showWelcomeIfNeeded(context: vscode.ExtensionContext): Promise<void> {
+  const shownVersion = context.globalState.get<string>(WELCOME_SHOWN_KEY);
+  const currentVersion = context.extension.packageJSON.version as string;
+  if (shownVersion === currentVersion) {
+    return;
+  }
+
+  await context.globalState.update(WELCOME_SHOWN_KEY, currentVersion);
+
+  const choice = await vscode.window.showInformationMessage(
+    'Kimi Code for Copilot 已安装/更新。查看快速开始指南？',
+    '打开欢迎页面',
+    '稍后再说',
+  );
+  if (choice === '打开欢迎页面') {
+    await vscode.commands.executeCommand(
+      'workbench.action.openWalkthrough',
+      WALKTHROUGH_ID,
+      false,
+    );
+  }
 }
