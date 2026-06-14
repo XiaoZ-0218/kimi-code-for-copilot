@@ -78,9 +78,10 @@ export function streamChatCompletion(
 
         for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          if (!trimmed || !trimmed.startsWith('data:')) continue;
 
-          const data = trimmed.slice(6);
+          // Kimi SSE omits the space after "data:" ("data:{...}").
+          const data = trimmed.slice(5).trimStart();
           if (data === '[DONE]') continue;
 
           try {
@@ -103,9 +104,11 @@ export function streamChatCompletion(
             if (delta?.reasoning_content) {
               // In thinking mode Kimi streams reasoning before the final answer.
               // Copilot Chat has no dedicated reasoning part, so surface it as text.
+              logger.debug(`[stream] reasoning ${delta.reasoning_content.length} chars`);
               callbacks.onData(delta.reasoning_content);
             }
             if (delta?.content) {
+              logger.debug(`[stream] content ${delta.content.length} chars`);
               callbacks.onData(delta.content);
             }
 
@@ -154,6 +157,7 @@ export function streamChatCompletion(
         }
       }
 
+      logger.debug(`[stream] complete usage=${usage ? JSON.stringify(usage) : 'none'}`);
       callbacks.onComplete(usage);
       resolve();
     } catch (error) {
