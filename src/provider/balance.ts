@@ -234,7 +234,7 @@ export class BalanceTracker {
       if (windowTier) {
         const pct = Math.round(windowTier.utilization);
         const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
-        sections.push('**5h 频限**');
+        sections.push('**5h 频限（占 5h 额度）**');
         sections.push(`${renderBar(windowTier.utilization)} ${pct}% · 重置 ${formatCountdown(resetMs)}`);
         sections.push('');
       }
@@ -245,7 +245,7 @@ export class BalanceTracker {
         const resetMs = this.usage.quotaResetDate !== 'N/A' ? new Date(this.usage.quotaResetDate).getTime() - Date.now() : 0;
         const hoursLeft = resetMs / (1000 * 60 * 60);
         const timeWindowsLeft = hoursLeft / 5;
-        sections.push('**本周用量**');
+        sections.push('**本周用量（占周额度）**');
         sections.push(`${renderBar(weeklyPct)} ${pct}% · 重置 ${formatCountdown(resetMs)}`);
         sections.push(`时间上还剩 ${timeWindowsLeft.toFixed(1)} 个 5h`);
         sections.push('');
