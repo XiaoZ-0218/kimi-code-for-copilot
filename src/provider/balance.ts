@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from '../logger';
 import { getApiUrl } from '../config';
+import { escapeMarkdown, formatDuration, formatNumber } from '../utils';
 import type { KimiUsage, KimiUsageTier, SessionUsage } from '../types';
 
 function freshSession(): SessionUsage {
@@ -11,19 +12,6 @@ function freshSession(): SessionUsage {
     requestCount: 0,
     startTime: Date.now(),
   };
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(Math.round(n));
-}
-
-function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  const hours = Math.floor(minutes / 60);
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  return `${minutes}m`;
 }
 
 export class BalanceTracker {
@@ -187,7 +175,9 @@ export class BalanceTracker {
       // API returns integer used/limit; the percentage is derived from them.
       // Status bar uses integer % for compactness; tooltip keeps the raw count.
       const pct = String(Math.round(windowTier.utilization));
-      const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
+      const resetMs = windowTier.resetsAt
+        ? safeDateDiff(windowTier.resetsAt)
+        : 0;
       const resetText = formatCountdown(resetMs);
       this.statusBar.text = `$(sparkle) KIMI · 5h ${pct}% · ${resetText}`;
     } else {
@@ -215,7 +205,7 @@ export class BalanceTracker {
       sections.push('**📡 用量看板运行中**');
       sections.push(`- 端口：${this.dashboardPort}`);
       if (this.dashboardLanUrl) {
-        sections.push(`- 局域网：${this.dashboardLanUrl}`);
+        sections.push(`- 局域网：${escapeMarkdown(this.dashboardLanUrl)}`);
       }
       sections.push('');
     }
@@ -233,7 +223,7 @@ export class BalanceTracker {
       // 5h window
       if (windowTier) {
         const pct = Math.round(windowTier.utilization);
-        const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
+        const resetMs = windowTier.resetsAt ? safeDateDiff(windowTier.resetsAt) : 0;
         sections.push('**5h 频限（占 5h 额度）**');
         sections.push(`${renderBar(windowTier.utilization)} ${pct}% · 重置 ${formatCountdown(resetMs)}`);
         sections.push('');
@@ -242,7 +232,7 @@ export class BalanceTracker {
       // Weekly usage
       if (weeklyEnt > 0) {
         const pct = Math.round(weeklyPct);
-        const resetMs = this.usage.quotaResetDate !== 'N/A' ? new Date(this.usage.quotaResetDate).getTime() - Date.now() : 0;
+        const resetMs = this.usage.quotaResetDate !== 'N/A' ? safeDateDiff(this.usage.quotaResetDate) : 0;
         const hoursLeft = resetMs / (1000 * 60 * 60);
         // Whole 5-hour windows remaining until weekly reset; current partial window is discarded.
         const windowsLeft = Math.max(0, Math.floor(hoursLeft / 5));
@@ -253,9 +243,9 @@ export class BalanceTracker {
       }
 
       if (this.usage.quotaResetDate !== 'N/A') {
-        sections.push(`下次重置：${formatDateTime(new Date(this.usage.quotaResetDate))}`);
+        sections.push(`下次重置：${escapeMarkdown(formatDateTime(new Date(this.usage.quotaResetDate)))}`);
       }
-      sections.push(`数据更新：${formatDateTime(new Date(this.usage.fetchedAt))}`);
+      sections.push(`数据更新：${escapeMarkdown(formatDateTime(new Date(this.usage.fetchedAt)))}`);
       sections.push('');
     }
 
@@ -280,8 +270,9 @@ export class BalanceTracker {
     sections.push(`[🔄 刷新用量](command:kimi-code-copilot.refreshUsage) · [打开控制台](https://www.kimi.com/code/console)`);
 
     const md = new vscode.MarkdownString(sections.join('\n'));
-    md.supportHtml = true;
-    md.isTrusted = true;
+    // Only allow the specific command we explicitly authored. API-returned
+    // strings have already been escaped, so this is defense in depth.
+    md.isTrusted = { enabledCommands: ['kimi-code-copilot.refreshUsage'] };
     return md;
   }
 
@@ -406,7 +397,7 @@ function renderBar(pct: number): string {
 }
 
 function formatCountdown(ms: number): string {
-  if (ms <= 0) return '0h00m';
+  if (!Number.isFinite(ms) || ms <= 0) return '0h00m';
   const totalMinutes = Math.floor(ms / 60000);
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
@@ -418,6 +409,7 @@ function formatCountdown(ms: number): string {
 }
 
 function formatDateTime(date: Date): string {
+  if (Number.isNaN(date.getTime())) return '未知';
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
@@ -426,8 +418,14 @@ function formatDateTime(date: Date): string {
   return `${y}-${m}-${d} ${h}:${min}`;
 }
 
+function safeDateDiff(dateValue: string | number | Date): number {
+  const date = new Date(dateValue);
+  const time = date.getTime();
+  if (Number.isNaN(time)) return 0;
+  return time - Date.now();
+}
+
 function findWindowTier(tiers: KimiUsageTier[]): KimiUsageTier | undefined {
   // Prefer the 5-hour (300-minute) window; fall back to any window tier.
   return tiers.find((t) => t.name === 'window' && t.resetsAt) ?? tiers.find((t) => t.name === 'window');
 }
-
