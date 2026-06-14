@@ -408,8 +408,12 @@ function renderBar(pct: number): string {
 function formatCountdown(ms: number): string {
   if (ms <= 0) return '0h00m';
   const totalMinutes = Math.floor(ms / 60000);
-  const hours = Math.floor(totalMinutes / 60);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
+  if (days > 0) {
+    return `${days}d${hours}h${String(minutes).padStart(2, '0')}m`;
+  }
   return `${hours}h${String(minutes).padStart(2, '0')}m`;
 }
 

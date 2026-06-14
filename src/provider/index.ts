@@ -12,6 +12,7 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
   onDidChangeLanguageModelChatInformation = this.onDidChangeEmitter.event;
 
   private isActive = true;
+  private hasKey = false;
   balanceTracker: BalanceTracker;
 
   constructor(
@@ -26,6 +27,9 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
       userAgent,
     );
 
+    // Cache key status so model info can reflect it synchronously.
+    void this.updateKeyStatus();
+
     context.subscriptions.push(
       this.onDidChangeEmitter,
       vscode.workspace.onDidChangeConfiguration((e) => {
@@ -34,8 +38,9 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
           this.balanceTracker.refreshDisplay();
         }
       }),
-      context.secrets.onDidChange((e) => {
+      context.secrets.onDidChange(async (e) => {
         if (e.key === 'kimi-code-copilot.apiKey') {
+          await this.updateKeyStatus();
           this.onDidChangeEmitter.fire();
           void this.balanceTracker.refreshBalance(true);
         }
@@ -44,6 +49,10 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
 
     void this.balanceTracker.refreshBalance(true);
     this.refreshModelPicker();
+  }
+
+  private async updateKeyStatus(): Promise<void> {
+    this.hasKey = await this.authManager.hasApiKey();
   }
 
   // ── Public commands ──
@@ -88,8 +97,7 @@ export class KimiCodeChatProvider implements vscode.LanguageModelChatProvider {
     _options: vscode.PrepareLanguageModelChatModelOptions,
     _token: vscode.CancellationToken,
   ): vscode.ProviderResult<vscode.LanguageModelChatInformation[]> {
-    // Return synchronously since we check the key in the background
-    return MODELS.map((model) => toChatInfo(model as ModelVariant, true));
+    return MODELS.map((model) => toChatInfo(model as ModelVariant, this.hasKey));
   }
 
   async provideLanguageModelChatResponse(
