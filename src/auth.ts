@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { getApiUrl } from './config';
-import { logger } from './logger';
+import { fetchWithTimeout } from './utils';
 
 const SECRET_KEY = 'kimi-code-copilot.apiKey';
 const VALIDATION_PATHS = ['/v1/models'];
@@ -74,9 +74,10 @@ async function validateApiKey(apiKey: string): Promise<string | null> {
   for (const path of VALIDATION_PATHS) {
     try {
       const url = getApiUrl(path);
-      const res = await fetch(url, {
+      const res = await fetchWithTimeout(url, {
         method: 'GET',
         headers: { Authorization: `Bearer ${apiKey}` },
+        timeoutMs: 15_000,
       });
 
       if (res.ok) return null;
