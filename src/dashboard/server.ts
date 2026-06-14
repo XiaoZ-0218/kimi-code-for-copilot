@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import * as os from 'node:os';
 import { logger } from '../logger';
+import { escapeHtml, formatNumber, formatDuration } from '../utils';
 import type { KimiUsage, SessionUsage } from '../types';
 
 export interface DashboardData {
@@ -10,13 +11,21 @@ export interface DashboardData {
   startTime: number;
 }
 
+export interface DashboardOptions {
+  /** Host to bind the HTTP server to. Defaults to 127.0.0.1. */
+  host?: string;
+  /** Whether to expose the dashboard to the LAN. Defaults to false. */
+  allowLan?: boolean;
+  /** Optional access token required via ?token=... query parameter. */
+  accessToken?: string;
+}
+
 function getLocalIPs(): string[] {
   const interfaces = os.networkInterfaces();
   const ips: string[] = [];
   for (const [, addrs] of Object.entries(interfaces)) {
     if (!addrs) continue;
-    const list = addrs as os.NetworkInterfaceInfo[];
-    for (const addr of list) {
+    for (const addr of addrs) {
       if (addr.family === 'IPv4' && !addr.internal) {
         ips.push(addr.address);
       }
@@ -25,29 +34,38 @@ function getLocalIPs(): string[] {
   return ips;
 }
 
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
-function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  const hours = Math.floor(minutes / 60);
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  return `${minutes}m`;
-}
-
-function renderPage(data: DashboardData): string {
+function renderPage(data: DashboardData, nonce: string): string {
   const { session, usage } = data;
   const totalTokens = session.promptTokens + session.completionTokens;
   const elapsed = Date.now() - session.startTime;
+
+  const csp = [
+    "default-src 'self'",
+    "script-src 'nonce-" + nonce + "'",
+    "style-src 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ');
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
 <title>Kimi Code 用量看板</title>
 <style>
   :root {
@@ -196,44 +214,44 @@ function renderPage(data: DashboardData): string {
     </div>
     <div class="stat-row">
       <span class="stat-label">Prompt Tokens</span>
-      <span class="stat-value">${formatNumber(session.promptTokens)}</span>
+      <span class="stat-value">${escapeHtml(formatNumber(session.promptTokens))}</span>
     </div>
     <div class="stat-row">
       <span class="stat-label">Completion Tokens</span>
-      <span class="stat-value">${formatNumber(session.completionTokens)}</span>
+      <span class="stat-value">${escapeHtml(formatNumber(session.completionTokens))}</span>
     </div>
     <div class="stat-row">
       <span class="stat-label">总计 Tokens</span>
-      <span class="stat-value big">${formatNumber(totalTokens)}</span>
+      <span class="stat-value big">${escapeHtml(formatNumber(totalTokens))}</span>
     </div>
     <div class="stat-row">
       <span class="stat-label">已用时间</span>
-      <span class="stat-value">${formatDuration(elapsed)}</span>
+      <span class="stat-value">${escapeHtml(formatDuration(elapsed))}</span>
     </div>
   </div>
 
   <!-- Usage Card -->
   ${usage ? `
   <div class="card">
-    <div class="card-title">📦 ${usage.copilotPlan} 套餐</div>
+    <div class="card-title">📦 ${escapeHtml(usage.copilotPlan)} 套餐</div>
     ${usage.tiers.map(tier => `
     <div class="stat-row">
-      <span class="stat-label">${tier.label}</span>
-      <span class="stat-value">${tier.limit ? `${tier.used}/${tier.limit}` : `${Math.round(tier.utilization)}%`}</span>
+      <span class="stat-label">${escapeHtml(tier.label)}</span>
+      <span class="stat-value">${tier.limit ? `${escapeHtml(formatNumber(tier.used ?? 0))}/${escapeHtml(formatNumber(tier.limit))}` : `${escapeHtml(String(Math.round(tier.utilization)))}%`}</span>
     </div>
     <div class="progress-bar">
-      <div class="progress-fill" style="width:${Math.min(100, tier.utilization)}%"></div>
+      <div class="progress-fill" style="width:${escapeHtml(String(Math.min(100, tier.utilization)))}%"></div>
     </div>
     `).join('')}
     ${usage.tiers.length === 0 && usage.premium.entitlement > 0 ? `
     <div class="stat-row">
       <span class="stat-label">Premium 剩余</span>
-      <span class="stat-value big">${usage.premium.remaining}/${usage.premium.entitlement}</span>
+      <span class="stat-value big">${escapeHtml(formatNumber(usage.premium.remaining))}/${escapeHtml(formatNumber(usage.premium.entitlement))}</span>
     </div>
     ` : ''}
     <div class="stat-row">
       <span class="stat-label">重置日期</span>
-      <span class="stat-value tag tag-info">${usage.quotaResetDate}</span>
+      <span class="stat-value tag tag-info">${escapeHtml(usage.quotaResetDate)}</span>
     </div>
   </div>
   ` : `
@@ -255,7 +273,7 @@ function renderPage(data: DashboardData): string {
     </div>
     <div class="stat-row">
       <span class="stat-label">控制台</span>
-      <a href="https://www.kimi.com/code/console" target="_blank" style="color:var(--accent);text-decoration:none;font-size:14px;">打开 →</a>
+      <a href="https://www.kimi.com/code/console" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;font-size:14px;">打开 →</a>
     </div>
   </div>
 
@@ -264,7 +282,7 @@ function renderPage(data: DashboardData): string {
   </div>
 </div>
 
-<script>
+<script nonce="${nonce}">
   // Auto-refresh every 5 seconds
   let countdown = 5;
   const statusEl = document.getElementById('status');
@@ -284,9 +302,23 @@ export class DashboardServer {
   private server: http.Server | null = null;
   private port = 0;
   private getData: () => DashboardData;
+  private options: Required<DashboardOptions>;
 
-  constructor(getData: () => DashboardData) {
+  constructor(getData: () => DashboardData, options: DashboardOptions = {}) {
     this.getData = getData;
+    this.options = {
+      host: options.host ?? '127.0.0.1',
+      allowLan: options.allowLan ?? false,
+      accessToken: options.accessToken ?? '',
+    };
+  }
+
+  setOptions(options: DashboardOptions) {
+    this.options = {
+      host: options.host ?? this.options.host,
+      allowLan: options.allowLan ?? this.options.allowLan,
+      accessToken: options.accessToken ?? this.options.accessToken,
+    };
   }
 
   async start(): Promise<{ port: number; urls: string[] }> {
@@ -295,18 +327,31 @@ export class DashboardServer {
     }
 
     return new Promise((resolve, reject) => {
-      this.server = http.createServer((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      this.server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
+        if (!this.isRequestAllowed(req)) {
+          res.writeHead(403, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
+          });
+          res.end('Forbidden');
+          return;
+        }
+
         try {
           const data = this.getData();
-          const html = renderPage(data);
+          const nonce = generateNonce();
+          const html = renderPage(data, nonce);
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-cache',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'Content-Security-Policy': this.buildCspHeader(nonce),
           });
           res.end(html);
         } catch (e) {
           logger.error(`Dashboard render error: ${e}`);
-          res.writeHead(500);
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('Internal Server Error');
         }
       });
@@ -316,12 +361,13 @@ export class DashboardServer {
         reject(err);
       });
 
-      this.server.listen(0, '0.0.0.0', () => {
+      const host = this.options.host;
+      this.server.listen(0, host, () => {
         const addr = this.server!.address();
         if (addr && typeof addr === 'object') {
           this.port = addr.port;
           const urls = this.getUrls();
-          logger.info(`Dashboard server started on port ${this.port}`);
+          logger.info(`Dashboard server started on ${host}:${this.port}`);
           resolve({ port: this.port, urls });
         } else {
           reject(new Error('Failed to get server address'));
@@ -333,6 +379,7 @@ export class DashboardServer {
   async stop(): Promise<void> {
     if (!this.server) return;
     return new Promise((resolve) => {
+      this.server!.closeAllConnections?.();
       this.server!.close(() => {
         this.server = null;
         this.port = 0;
@@ -351,12 +398,53 @@ export class DashboardServer {
   }
 
   getUrls(): string[] {
-    const ips = getLocalIPs();
+    const ips = this.options.allowLan ? getLocalIPs() : [];
     const urls: string[] = [];
     urls.push(`http://localhost:${this.port}`);
     for (const ip of ips) {
       urls.push(`http://${ip}:${this.port}`);
     }
     return urls;
+  }
+
+  private buildCspHeader(nonce: string): string {
+    return [
+      "default-src 'self'",
+      `script-src 'nonce-${nonce}'`,
+      "style-src 'unsafe-inline'",
+      "img-src 'self' data:",
+      "connect-src 'self'",
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+    ].join('; ');
+  }
+
+  private isRequestAllowed(req: http.IncomingMessage): boolean {
+    const clientIp = this.extractClientIp(req);
+    const isLocal =
+      clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1';
+
+    if (!this.options.allowLan && !isLocal) {
+      return false;
+    }
+
+    if (this.options.accessToken) {
+      const host = req.headers.host ?? 'localhost';
+      const protocol = 'http'; // local server only
+      const url = new URL(req.url ?? '/', `${protocol}://${host}`);
+      return url.searchParams.get('token') === this.options.accessToken;
+    }
+
+    return true;
+  }
+
+  private extractClientIp(req: http.IncomingMessage): string {
+    const socketAddress = req.socket.remoteAddress;
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.length > 0) {
+      return forwarded.split(',')[0].trim();
+    }
+    return socketAddress ?? '';
   }
 }
