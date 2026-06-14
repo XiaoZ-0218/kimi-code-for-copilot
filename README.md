@@ -6,7 +6,7 @@
 
 [![VS Code](https://img.shields.io/badge/VS%20Code-≥1.116-6366f1?logo=visualstudiocode)](https://code.visualstudio.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)](./package.json)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](./package.json)
 
 ---
 
