@@ -98,10 +98,14 @@ export async function prepareChatRequest(params: {
   }
 
   const requestedTemp = options.modelOptions?.['temperature'];
-  if (typeof requestedTemp === 'number') {
-    body.temperature = requestedTemp;
-  } else if (!isThinking) {
-    body.temperature = 0.7;
+  if (isThinking) {
+    // Thinking mode accepts any temperature; only set when explicitly requested.
+    if (typeof requestedTemp === 'number') {
+      body.temperature = requestedTemp;
+    }
+  } else {
+    // Fast mode: Kimi Code only accepts temperature 0.6 (400 otherwise).
+    body.temperature = 0.6;
   }
 
   const mo = options.modelOptions;
