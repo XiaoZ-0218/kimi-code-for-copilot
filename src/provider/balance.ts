@@ -189,7 +189,7 @@ export class BalanceTracker {
       const pct = String(Math.round(windowTier.utilization));
       const resetMs = windowTier.resetsAt ? new Date(windowTier.resetsAt).getTime() - Date.now() : 0;
       const resetText = formatCountdown(resetMs);
-      this.statusBar.text = `$(sparkle) KIMI · 5h · ${pct}% · ${resetText}`;
+      this.statusBar.text = `$(sparkle) KIMI · 5h ${pct}% · ${resetText}`;
     } else {
       // Fallback: show premium remaining
       const rem = this.usage.premium.remaining;
